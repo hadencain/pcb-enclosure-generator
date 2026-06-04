@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import type { ReactNode } from 'react';
 import type { Mesh } from '../lib/types';
 import {
   buildTerrainMesh, loadManifold,
@@ -12,8 +13,14 @@ const PIECE_TYPES: { id: PieceType; label: string; desc: string }[] = [
   { id: 'wall_straight', label: 'Straight',   desc: 'Wall on one edge'              },
   { id: 'wall_corner',   label: 'Corner',     desc: 'L-shaped, walls on two edges'  },
   { id: 'wall_t',        label: 'T-Junction', desc: 'Walls on three edges'          },
+  { id: 'wall_cross',    label: 'Crossing',   desc: 'Walls on all four edges'       },
   { id: 'wall_doorway',  label: 'Doorway',    desc: 'Wall with centered opening'    },
+  { id: 'wall_window',   label: 'Window',     desc: 'Wall with raised window'       },
+  { id: 'wall_curved',   label: 'Curved',     desc: 'Quarter-circle curved wall'    },
+  { id: 'column',        label: 'Column',     desc: 'Base tile with central pillar' },
+  { id: 'staircase',     label: 'Staircase',  desc: '4-step stair rising to wall height' },
   { id: 'floor',         label: 'Floor',      desc: 'Flat base tile, no walls'      },
+  { id: 'clip',          label: 'Clip',       desc: 'OpenLOCK joining clip (print 2 per joint)' },
 ];
 
 const GRID_SIZES: { id: GridSize; label: string }[] = [
@@ -56,7 +63,12 @@ function SliderRow({
   );
 }
 
-export function TerrainPanel() {
+interface TerrainPanelProps {
+  onParamsChange?: (p: TerrainParams) => void;
+  batchSlot?: ReactNode;
+}
+
+export function TerrainPanel({ onParamsChange, batchSlot }: TerrainPanelProps = {}) {
   const [params,     setParams]     = useState<TerrainParams>(DEFAULT_TERRAIN_PARAMS);
   const [mesh,       setMesh]       = useState<Mesh | null>(null);
   const [status,     setStatus]     = useState<'idle' | 'loading-wasm' | 'generating' | 'ready' | 'error'>('idle');
@@ -97,7 +109,11 @@ export function TerrainPanel() {
   }, [params, generate]);
 
   function handleChange(patch: Partial<TerrainParams>) {
-    setParams(prev => ({ ...prev, ...patch }));
+    setParams(prev => {
+      const next = { ...prev, ...patch };
+      onParamsChange?.(next);
+      return next;
+    });
   }
 
   function handleExport() {
@@ -113,6 +129,7 @@ export function TerrainPanel() {
   }
 
   const isFloor = params.pieceType === 'floor';
+  const isClip  = params.pieceType === 'clip';
   const busy    = status === 'loading-wasm' || status === 'generating';
 
   return (
@@ -143,19 +160,21 @@ export function TerrainPanel() {
         </div>
 
         {/* Grid size */}
-        <div className="section-label">grid size</div>
-        <div className="seg-buttons" style={{ marginBottom: 8 }}>
-          {GRID_SIZES.map(g => (
-            <button
-              key={g.id}
-              className={`tab-btn${params.gridSize === g.id ? ' active' : ''}`}
-              onClick={() => handleChange({ gridSize: g.id })}
-            >{g.label}</button>
-          ))}
-        </div>
+        {!isClip && <>
+          <div className="section-label">grid size</div>
+          <div className="seg-buttons" style={{ marginBottom: 8 }}>
+            {GRID_SIZES.map(g => (
+              <button
+                key={g.id}
+                className={`tab-btn${params.gridSize === g.id ? ' active' : ''}`}
+                onClick={() => handleChange({ gridSize: g.id })}
+              >{g.label}</button>
+            ))}
+          </div>
+        </>}
 
         {/* Wall height */}
-        {!isFloor && <>
+        {!isFloor && !isClip && <>
           <div className="section-label">wall height</div>
           <div className="seg-buttons" style={{ marginBottom: 8 }}>
             {WALL_HEIGHTS.map(h => (
@@ -297,6 +316,8 @@ export function TerrainPanel() {
             <span className="stat">manifold</span>
           </div>
         )}
+
+        {batchSlot}
       </div>
 
       {/* ── Right 3D preview ── */}

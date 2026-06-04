@@ -24,7 +24,7 @@ const CHAN_D             = 1.78;   // mm each T-channel step depth
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
-export type PieceType  = 'wall_straight' | 'wall_corner' | 'wall_t' | 'wall_doorway' | 'floor';
+export type PieceType  = 'wall_straight' | 'wall_corner' | 'wall_t' | 'wall_doorway' | 'wall_cross' | 'wall_window' | 'wall_curved' | 'column' | 'staircase' | 'floor' | 'clip';
 export type GridSize   = '1x1' | '2x1' | '2x2';
 export type WallHeight = 'full' | 'half';
 export type Theme      = 'clean' | 'dungeon' | 'gothic' | 'cave' | 'scifi' | 'wood';
@@ -98,7 +98,13 @@ export async function buildTerrainMesh(params: TerrainParams): Promise<Mesh> {
     case 'wall_corner':   solid = pWallCorner  (M, gx, wh, params); break;
     case 'wall_t':        solid = pWallT       (M, gx, wh, params); break;
     case 'wall_doorway':  solid = pWallDoorway (M, gx, wh, params); break;
+    case 'wall_cross':    solid = pWallCross   (M, gx, wh, params); break;
+    case 'wall_window':   solid = pWallWindow  (M, gx, wh, params); break;
+    case 'wall_curved':   solid = pWallCurved  (M, gx, wh, params); break;
+    case 'column':        solid = pColumn      (M, gx, wh, params); break;
+    case 'staircase':     solid = pStaircase   (M, gx, wh, params); break;
     case 'floor':         solid = pFloor       (M, gx, gy, params); break;
+    case 'clip':          solid = pClip        (M, params);          break;
     default:              solid = pFloor       (M, 1, 1, params);
   }
 
@@ -205,6 +211,90 @@ function pFloor(M: M3, gx: number, gy: number, p: TerrainParams) {
   return solid;
 }
 
+function pWallCross(M: M3, gx: number, wh: number, p: TerrainParams) {
+  const tx = gx * GRID, ty = GRID;
+  let solid = box(M, tx, ty, BASE_T).translate(0, 0, BASE_T / 2);
+  const ew = edgeCenter(tx), ey = edgeCenter(ty);
+  solid = solid
+    .add(box(M, tx,     WALL_W, wh + BASE_T).translate(0,   ey, (wh + BASE_T) / 2))
+    .add(box(M, tx,     WALL_W, wh + BASE_T).translate(0,  -ey, (wh + BASE_T) / 2))
+    .add(box(M, WALL_W, ty,     wh + BASE_T).translate( ew,  0, (wh + BASE_T) / 2))
+    .add(box(M, WALL_W, ty,     wh + BASE_T).translate(-ew,  0, (wh + BASE_T) / 2));
+  solid = addAllPorts(M, solid, tx, ty, p.tolerance);
+  return applyTheme(M, solid, 'wall_cross', tx, ty, wh, p);
+}
+
+function pWallWindow(M: M3, gx: number, wh: number, p: TerrainParams) {
+  const tx = gx * GRID, ty = GRID;
+  const wallY = edgeCenter(ty);
+  const winW  = Math.min(GRID * 0.5, tx * 0.3);
+  const winH  = wh * 0.35;
+  const sill  = BASE_T + wh * 0.35;
+
+  let solid = box(M, tx, ty, BASE_T).translate(0, 0, BASE_T / 2);
+  const northWall = box(M, tx, WALL_W, wh + BASE_T).translate(0, wallY, (wh + BASE_T) / 2);
+  const winCut    = box(M, winW, WALL_W + 2, winH).translate(0, wallY, sill + winH / 2);
+  solid = solid.add(northWall).subtract(winCut);
+
+  if (p.theme === 'gothic') {
+    const archR = winW / 2;
+    const archCyl = M.cylinder(WALL_W + 2, archR, archR, 32)
+      .rotate(90, 0, 0)
+      .translate(0, ty / 2 + 1, sill + winH);
+    solid = solid.subtract(archCyl);
+  }
+
+  solid = addAllPorts(M, solid, tx, ty, p.tolerance);
+  return applyTheme(M, solid, 'wall_window', tx, ty, wh, p);
+}
+
+function pWallCurved(M: M3, gx: number, wh: number, p: TerrainParams) {
+  const tx = gx * GRID, ty = GRID;
+  const wallH = wh + BASE_T;
+
+  let solid = box(M, tx, ty, BASE_T).translate(0, 0, BASE_T / 2);
+  const wallMass = box(M, tx, ty, wallH).translate(0, 0, wallH / 2);
+  const innerCyl = M.cylinder(wallH + 2, tx / 2, tx / 2, 64).translate(tx / 2, ty / 2, -1);
+  solid = solid.add(wallMass.subtract(innerCyl));
+  solid = addAllPorts(M, solid, tx, ty, p.tolerance);
+  return solid;
+}
+
+function pColumn(M: M3, gx: number, wh: number, p: TerrainParams) {
+  const tx = gx * GRID, ty = GRID;
+  const colW = GRID * 0.35;
+  let solid = box(M, tx, ty, BASE_T).translate(0, 0, BASE_T / 2);
+  solid = solid.add(box(M, colW, colW, wh).translate(0, 0, BASE_T + wh / 2));
+  solid = addAllPorts(M, solid, tx, ty, p.tolerance);
+  return solid;
+}
+
+function pStaircase(M: M3, gx: number, wh: number, p: TerrainParams) {
+  const tx = gx * GRID, ty = GRID;
+  const stepD = ty / 4;
+  const stepR = wh / 4;
+
+  let solid = box(M, tx, ty, BASE_T).translate(0, 0, BASE_T / 2);
+  for (let n = 0; n < 4; n++) {
+    const h  = BASE_T + (n + 1) * stepR;
+    const yc = -ty / 2 + n * stepD + stepD / 2;
+    solid = solid.add(box(M, tx, stepD, h).translate(0, yc, h / 2));
+  }
+  solid = solid.add(box(M, tx, WALL_W, wh + BASE_T).translate(0, edgeCenter(ty), (wh + BASE_T) / 2));
+  solid = addAllPorts(M, solid, tx, ty, p.tolerance);
+  return applyTheme(M, solid, 'staircase', tx, ty, wh, p);
+}
+
+function pClip(M: M3, p: TerrainParams) {
+  const tol     = p.tolerance;
+  const clipLen = SLOT_LEN - 1.0;
+  const flange  = box(M, WIDE_W - 0.2 + tol, clipLen, CHAN_D - 0.1)
+    .translate(0, 0, (CHAN_D - 0.1) / 2);
+  const stem    = box(M, STEM_W - 0.2 + tol, clipLen, CHAN_D - 0.1)
+    .translate(0, 0, CHAN_D - 0.1 + (CHAN_D - 0.1) / 2);
+  return flange.add(stem);
+}
+
 // ── Port helpers ──────────────────────────────────────────────────────────────
 
 function addAllPorts(M: M3, solid: M3, tx: number, ty: number, tol: number): M3 {
@@ -249,11 +339,18 @@ function wallFaces(pieceType: PieceType, tx: number, ty: number): WallFace[] {
   const N: WallFace = { axis: 'y', coord: +ty / 2, width: tx };
   const E: WallFace = { axis: 'x', coord: +tx / 2, width: ty };
   const W: WallFace = { axis: 'x', coord: -tx / 2, width: ty };
+  const S: WallFace = { axis: 'y', coord: -ty / 2, width: tx };
   switch (pieceType) {
     case 'wall_straight': return [N];
     case 'wall_corner':   return [N, E];
     case 'wall_t':        return [N, E, W];
     case 'wall_doorway':  return [N];
+    case 'wall_cross':    return [N, E, W, S];
+    case 'wall_window':   return [N];
+    case 'wall_curved':   return [];
+    case 'column':        return [];
+    case 'staircase':     return [N];
+    case 'clip':          return [];
     default:              return [];
   }
 }
@@ -265,8 +362,12 @@ function applyTheme(M: M3, solid: M3, pieceType: PieceType, tx: number, ty: numb
   for (const face of faces) {
     switch (p.theme) {
       case 'dungeon':
+        solid = brickCutsOnFace(M, solid, face, wh, p.brickScale, p.mortarDepth);
+        break;
       case 'gothic':
         solid = brickCutsOnFace(M, solid, face, wh, p.brickScale, p.mortarDepth);
+        solid = gothicArchWindowOnFace(M, solid, face, wh);
+        solid = gothicCrenellationsOnFace(M, solid, face, wh);
         break;
       case 'cave':
         solid = caveCutsOnFace(M, solid, face, wh, p.stoneScale, p.roughness);
@@ -325,6 +426,60 @@ function brickCutsOnFace(M: M3, solid: M3, face: WallFace, wh: number, brickScal
           : box(M, MD, MT, bh).translate(fc, pos, z0 + bh / 2)
       );
     }
+  }
+  return solid;
+}
+
+function gothicArchWindowOnFace(M: M3, solid: M3, face: WallFace, wh: number): M3 {
+  const winW  = Math.min(face.width * 0.28, 7);
+  const winH  = wh * 0.42;
+  const sill  = BASE_T + wh * 0.28;
+  const wallD = WALL_W + 2;
+  const inset = Math.sign(face.coord) * WALL_W / 2;
+  const fc    = face.coord - inset;
+  const rectH = winH * 0.65;
+
+  solid = solid.subtract(
+    face.axis === 'y'
+      ? box(M, winW, wallD, rectH).translate(0,  fc, sill + rectH / 2)
+      : box(M, wallD, winW, rectH).translate(fc, 0,  sill + rectH / 2)
+  );
+
+  const archR  = winW / 2;
+  const archZ  = sill + rectH;
+  const offset = winW * 0.22;
+  for (const sign of [-1, 1] as const) {
+    const cyl = M.cylinder(wallD, archR, archR, 32)
+      .rotate(90, 0, 0)
+      .translate(
+        face.axis === 'y' ? sign * offset : fc,
+        face.axis === 'y' ? fc            : sign * offset,
+        archZ + archR * 0.55
+      );
+    solid = solid.subtract(cyl);
+  }
+  return solid;
+}
+
+function gothicCrenellationsOnFace(M: M3, solid: M3, face: WallFace, wh: number): M3 {
+  const notchW = 4.0;
+  const notchH = 6.0;
+  const pitch  = 10.0;
+  const W      = face.width;
+  const wallD  = WALL_W + 2;
+  const inset  = Math.sign(face.coord) * WALL_W / 2;
+  const fc     = face.coord - inset;
+  const topZ   = BASE_T + wh;
+  const count  = Math.floor(W / pitch);
+
+  for (let i = 0; i < count; i++) {
+    if (i % 2 === 0) continue;
+    const pos = -W / 2 + (i + 0.5) * (W / count);
+    solid = solid.subtract(
+      face.axis === 'y'
+        ? box(M, notchW, wallD, notchH).translate(pos, fc, topZ - notchH / 2)
+        : box(M, wallD, notchW, notchH).translate(fc, pos, topZ - notchH / 2)
+    );
   }
   return solid;
 }
@@ -408,9 +563,7 @@ function panelCutsOnFace(M: M3, solid: M3, face: WallFace, wh: number, panelSize
   // Tech insets at panel corners (small deeper squares)
   const insetSize = Math.min(4, panelSize * 0.15);
   for (let ih = 0; ih <= nh - 1; ih++) {
-    const z = BASE_T + ih * (wh / nh) + (ih === 0 ? wh / nh * 0.5 : 0);
     for (let iv = 0; iv <= nv - 1; iv++) {
-      const pos = -W / 2 + iv * (W / nv) + (iv === 0 ? W / nv * 0.5 : 0);
       const iz = BASE_T + (ih + 0.5) * (wh / nh);
       const ip = -W / 2 + (iv + 0.5) * (W / nv);
       const techD = panelDepth * 1.5;
@@ -471,8 +624,8 @@ function floorTexture(M: M3, solid: M3, theme: Theme, tx: number, ty: number, p:
       return flagstoneLines(M, solid, tx, ty, GRID * p.brickScale, D);
     }
     case 'cave': {
-      // Larger, more irregular slabs
-      return flagstoneLines(M, solid, tx, ty, GRID * 1.5 * p.stoneScale, D);
+      solid = flagstoneLines(M, solid, tx, ty, GRID * 1.5 * p.stoneScale, D);
+      return addStalagmites(M, solid, tx, ty, p.roughness);
     }
     case 'scifi': {
       // Smaller panel grid
@@ -490,6 +643,20 @@ function floorTexture(M: M3, solid: M3, theme: Theme, tx: number, ty: number, p:
     }
     default: return solid;
   }
+}
+
+function addStalagmites(M: M3, solid: M3, tx: number, ty: number, roughness: number): M3 {
+  const count = Math.round(roughness * 1.5 + 1);
+  for (let i = 0; i < count; i++) {
+    const nx = Math.sin(i * 7.3 + 1.1) * 0.5 + 0.5;
+    const ny = Math.sin(i * 3.7 + 2.3) * 0.5 + 0.5;
+    const x  = (nx - 0.5) * (tx - 8);
+    const y  = (ny - 0.5) * (ty - 8);
+    const h  = 3 + Math.abs(Math.sin(i * 5.1)) * 4;
+    const r  = 1.0 + Math.abs(Math.sin(i * 2.3)) * 0.8;
+    solid = solid.add(M.cylinder(h, r, 0, 12).translate(x, y, BASE_T + h / 2));
+  }
+  return solid;
 }
 
 function flagstoneLines(M: M3, solid: M3, tx: number, ty: number, pitch: number, depth: number): M3 {
