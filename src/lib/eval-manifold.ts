@@ -15,13 +15,15 @@ export function irToManifold(M: M3, ir: IR): M3 {
     case 'rotate':
       return irToManifold(M, ir.child).rotate(ir.deg[0], ir.deg[1], ir.deg[2]);
     case 'union':
-      return ir.children.map(c => irToManifold(M, c)).reduce((a, b) => a.add(b));
-    case 'difference': {
-      const [first, ...rest] = ir.children.map(c => irToManifold(M, c));
+    case 'difference':
+    case 'intersection': {
+      if (ir.children.length === 0) throw new Error(`'${ir.op}' node has no children`);
+      const parts = ir.children.map(c => irToManifold(M, c));
+      if (ir.op === 'union') return parts.reduce((a, b) => a.add(b));
+      if (ir.op === 'intersection') return parts.reduce((a, b) => a.intersect(b));
+      const [first, ...rest] = parts;
       return rest.reduce((a, b) => a.subtract(b), first);
     }
-    case 'intersection':
-      return ir.children.map(c => irToManifold(M, c)).reduce((a, b) => a.intersect(b));
   }
 }
 

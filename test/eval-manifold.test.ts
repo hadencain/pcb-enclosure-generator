@@ -25,4 +25,9 @@ describe('irToManifold', () => {
     const mesh = await irToMesh(bx([5, 5, 5]));
     expect(mesh.tris.length).toBe(12);
   });
+
+  it('throws on a CSG node with no children', async () => {
+    const M = (await loadManifold()).Manifold;
+    expect(() => irToManifold(M, { op: 'union', children: [] } as any)).toThrow(/no children/);
+  });
 });
