@@ -39,12 +39,13 @@ export function buildEnclosure(spec: EnclosureSpec): { body: IR; lid: IR } {
   const jointPockets = joint.bodyFeatures(rim, spec.joint.tolerance);
   const jointClips = joint.lidFeatures(rim, spec.joint.tolerance);
 
-  // Body = (shell + posts) − cavity − ports − jointPockets − postHoles
+  // Body = (shell − cavity − ports − jointPockets) + posts, then drill postHoles.
+  // Posts are added AFTER the cavity subtraction so they survive the interior cut.
   const body: IR = diff([
-    uni([shell, ...posts]),
-    cavity,
-    ...portCuts,
-    ...jointPockets,
+    uni([
+      diff([shell, cavity, ...portCuts, ...jointPockets]),
+      ...posts,
+    ]),
     ...postHoles,
   ]);
 

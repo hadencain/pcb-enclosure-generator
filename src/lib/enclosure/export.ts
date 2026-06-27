@@ -26,13 +26,18 @@ export function triggerDownload(filename: string, data: BlobPart, mime: string):
 }
 
 export async function exportEnclosure(spec: EnclosureSpec): Promise<void> {
+  // Build the IR once, then derive both mesh and scad from it.
+  const ir = buildEnclosure(spec);
+
   if (spec.exports.includes('stl')) {
-    const { body, lid } = await enclosureToMeshes(spec);
+    const body = await irToMesh(ir.body);
+    const lid = await irToMesh(ir.lid);
     triggerDownload('enclosure_body.stl', buildSTL(body), 'application/octet-stream');
     triggerDownload('enclosure_lid.stl', buildSTL(lid), 'application/octet-stream');
   }
   if (spec.exports.includes('scad')) {
-    const { body, lid } = enclosureToScad(spec);
+    const body = emitScad(ir.body);
+    const lid = emitScad(ir.lid);
     triggerDownload('enclosure_body.scad', body, 'text/plain');
     triggerDownload('enclosure_lid.scad', lid, 'text/plain');
   }

@@ -10,7 +10,7 @@ function emit(ir: IR, depth: number): string {
     case 'box':
       return `${i}cube(${vec(ir.size)}, center=true);`;
     case 'cyl':
-      return `${i}cylinder(h=${num(ir.h)}, r1=${num(ir.r1)}, r2=${num(ir.r2)}, $fn=${ir.fn}, center=true);`;
+      return `${i}cylinder(h=${num(ir.h)}, r1=${num(ir.r1)}, r2=${num(ir.r2)}, $fn=${num(ir.fn)}, center=true);`;
     case 'translate':
       return `${i}translate(${vec(ir.v)}) {\n${emit(ir.child, depth + 1)}\n${i}}`;
     case 'rotate':

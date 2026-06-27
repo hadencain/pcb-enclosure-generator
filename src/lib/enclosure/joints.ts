@@ -19,7 +19,6 @@ export interface JointGenerator {
 // OpenLock-derived T-clip dimensions (mm), retuned for a lid lip rather than tabletop tiles.
 const CHAN_D = 1.78;   // channel step depth
 const WIDE_W = 8.78;   // wide flange width
-const CLIP_LEN = 12.0; // clip length along the rim
 
 /** Evenly spaced clip center positions along an edge of given length. */
 function clipPositions(edgeLen: number, spacing = 20): number[] {
@@ -49,7 +48,7 @@ const openlock: JointGenerator = {
     // Matching clip bosses on the lid underside that seat into the body pockets.
     const feats: IR[] = [];
     const clipH = CHAN_D - 0.1;
-    const z = rim.rimZ + clipH / 2; // sits just below the lid plate (lid placed at rimZ)
+    const z = rim.rimZ - clipH / 2; // clip seats into the body pocket (spans rimZ - clipH .. rimZ)
     const innerHalfL = rim.outerL / 2 - rim.wall / 2;
     const innerHalfW = rim.outerW / 2 - rim.wall / 2;
     for (const x of clipPositions(rim.outerL)) {
@@ -73,4 +72,3 @@ export function getJoint(type: JointType): JointGenerator {
   }
 }
 
-export { CLIP_LEN };

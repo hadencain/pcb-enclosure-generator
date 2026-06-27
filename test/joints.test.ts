@@ -12,6 +12,17 @@ describe('openlock-clip joint', () => {
     expect(lid.length).toBeGreaterThan(0);
   });
 
+  it('lid clip Z is below rimZ (seats into body pocket)', () => {
+    const j = getJoint('openlock-clip');
+    const clips = j.lidFeatures(rim, 0.2);
+    for (const clip of clips) {
+      expect(clip.op).toBe('translate');
+      if (clip.op === 'translate') {
+        expect(clip.v[2]).toBeLessThan(rim.rimZ);
+      }
+    }
+  });
+
   it('throws for the not-yet-built cantilever joint', () => {
     expect(() => getJoint('cantilever')).toThrow(/cantilever/);
   });

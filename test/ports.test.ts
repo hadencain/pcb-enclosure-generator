@@ -24,6 +24,7 @@ describe('buildPortCutter', () => {
       expect(ir.v[0]).toBeCloseTo(-1.5);
       expect(ir.v[1]).toBeCloseTo(23);
       expect(ir.v[2]).toBeCloseTo(8.2);
+      expect(ir.child.op).toBe('box');
       if (ir.child.op === 'box') {
         expect(ir.child.size[0]).toBeCloseTo(10); // openW along X
         expect(ir.child.size[2]).toBeCloseTo(4.2); // openH along Z

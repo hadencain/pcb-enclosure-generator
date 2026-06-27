@@ -38,4 +38,17 @@ describe('buildEnclosure (manifold smoke)', () => {
     expect(l.volume()).toBeGreaterThan(0);
     expect(b.genus()).toBe(0); // no unintended through-holes/tunnels in the shell topology
   });
+
+  it('taller standoff posts increase body volume (posts survive cavity subtraction)', async () => {
+    const M = (await loadManifold()).Manifold;
+    const defaultIR = buildEnclosure(DEFAULT_SPEC);
+    const tallerSpec = {
+      ...DEFAULT_SPEC,
+      standoff: { ...DEFAULT_SPEC.standoff, height: DEFAULT_SPEC.standoff.height + 5 },
+    };
+    const tallerIR = buildEnclosure(tallerSpec);
+    const defaultVol = irToManifold(M, defaultIR.body).volume();
+    const tallerVol = irToManifold(M, tallerIR.body).volume();
+    expect(tallerVol).toBeGreaterThan(defaultVol);
+  });
 });

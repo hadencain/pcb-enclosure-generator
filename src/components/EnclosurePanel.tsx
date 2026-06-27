@@ -29,6 +29,17 @@ export function EnclosurePanel() {
     }
   }
 
+  async function handleExport() {
+    setBusy(true); setErr(null);
+    try {
+      await exportEnclosure(spec);
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const num = (label: string, value: number, on: (v: number) => void) => (
     <label style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
       <span>{label}</span>
@@ -60,7 +71,7 @@ export function EnclosurePanel() {
         </label>
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button onClick={generate} disabled={busy}>{busy ? 'Generating…' : 'Generate'}</button>
-          <button onClick={() => exportEnclosure(spec)} disabled={busy}>Export</button>
+          <button onClick={handleExport} disabled={busy}>Export</button>
         </div>
         {err && <p style={{ color: 'crimson', maxWidth: 240 }}>{err}</p>}
       </div>
