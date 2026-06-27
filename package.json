@@ -1,5 +1,5 @@
 {
-  "name": "terrain-gen",
+  "name": "pcb-enclosure-generator",
   "private": true,
   "version": "0.1.0",
   "type": "module",
