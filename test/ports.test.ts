@@ -20,15 +20,16 @@ describe('buildPortCutter', () => {
     const ir = buildPortCutter(rp, dims, 2.0);
     expect(ir.op).toBe('translate');
     if (ir.op === 'translate') {
-      // north face: y at +outerW/2 = 23; box centered there, cut spans wall
+      // north face: box centered on the wall mid-plane (outerW/2 − wall/2 = 22)
+      // so it spans 1mm inside the cavity to 1mm outside the shell.
       expect(ir.v[0]).toBeCloseTo(-1.5);
-      expect(ir.v[1]).toBeCloseTo(23);
+      expect(ir.v[1]).toBeCloseTo(22);
       expect(ir.v[2]).toBeCloseTo(8.2);
       expect(ir.child.op).toBe('box');
       if (ir.child.op === 'box') {
         expect(ir.child.size[0]).toBeCloseTo(10); // openW along X
         expect(ir.child.size[2]).toBeCloseTo(4.2); // openH along Z
-        expect(ir.child.size[1]).toBeGreaterThan(2.0); // pierces the wall
+        expect(ir.child.size[1]).toBeCloseTo(4);   // depth = wall + 2, pierces fully
       }
     }
   });

@@ -60,15 +60,28 @@ export function EnclosurePanel() {
         {num('floor', spec.clearances.floor, v => patchClear('floor', v))}
         {num('ceiling', spec.clearances.ceiling, v => patchClear('ceiling', v))}
         {num('pcb gap', spec.clearances.pcbGap, v => patchClear('pcbGap', v))}
-        <h3>Fit</h3>
-        {num('tolerance', spec.tolerance, v => setSpec(s => ({ ...s, tolerance: v, joint: { ...s.joint, tolerance: v } })))}
-        <label>joint:&nbsp;
-          <select value={spec.joint.type}
-            onChange={e => setSpec(s => ({ ...s, joint: { ...s.joint, type: e.target.value as EnclosureSpec['joint']['type'] } }))}>
-            <option value="openlock-clip">openlock-clip</option>
-            <option value="cantilever">cantilever (Phase B)</option>
+        <h3>Closure</h3>
+        <label>type:&nbsp;
+          <select value={spec.closure.type}
+            onChange={e => setSpec(s => ({ ...s, closure: { type: e.target.value as EnclosureSpec['closure']['type'] } }))}>
+            <option value="screw">screw (corner bosses)</option>
+            <option value="snap">snap (rim clip)</option>
           </select>
         </label>
+        {spec.closure.type === 'screw'
+          ? num('screw Ø', spec.screw.dia, v => setSpec(s => ({ ...s, screw: { ...s.screw, dia: v } })))
+          : (
+            <label>joint:&nbsp;
+              <select value={spec.joint.type}
+                onChange={e => setSpec(s => ({ ...s, joint: { ...s.joint, type: e.target.value as EnclosureSpec['joint']['type'] } }))}>
+                <option value="openlock-clip">openlock-clip</option>
+                <option value="cantilever">cantilever (Phase B)</option>
+              </select>
+            </label>
+          )}
+        <h3>Fit</h3>
+        {num('tolerance', spec.tolerance, v => setSpec(s => ({ ...s, tolerance: v, joint: { ...s.joint, tolerance: v } })))}
+        {num('chamfer', spec.chamfer, v => setSpec(s => ({ ...s, chamfer: v })))}
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button onClick={generate} disabled={busy}>{busy ? 'Generating…' : 'Generate'}</button>
           <button onClick={handleExport} disabled={busy}>Export</button>

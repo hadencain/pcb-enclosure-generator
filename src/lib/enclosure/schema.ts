@@ -1,5 +1,6 @@
 export type Face = 'N' | 'S' | 'E' | 'W'; // N=+Y, S=-Y, E=+X, W=-X
 export type JointType = 'openlock-clip' | 'cantilever';
+export type ClosureType = 'screw' | 'snap'; // how the lid is retained
 export type PortType = 'usb-c' | 'usb-a' | 'micro-usb' | 'barrel' | 'rect' | 'circle';
 
 /** Component no-go volume, authored in PCB-corner space.
@@ -26,8 +27,14 @@ export interface EnclosureSpec {
   standoff: { height: number; holeDia: number };
   keepouts: KeepOut[];
   ports: Port[];
-  joint: { type: JointType; spacing: number; tolerance: number };
+  closure: { type: ClosureType };
+  // Corner screw bosses (used when closure.type === 'screw'). Self-tapping by default:
+  //   dia = screw shank, pilotDia = boss bore the screw threads into,
+  //   bossDia = outer Ø of the boss column, headDia = lid counterbore Ø.
+  screw: { dia: number; pilotDia: number; bossDia: number; headDia: number };
+  joint: { type: JointType; spacing: number; tolerance: number }; // used when closure.type === 'snap'
   lid: { lipDepth: number; lipInset: number; thickness: number };
+  chamfer: number; // 45° lead-in / edge-relief size, mm (0 disables)
   tolerance: number; // global fit tuning, mm
   exports: ('stl' | 'scad')[];
 }
@@ -42,8 +49,11 @@ export const DEFAULT_SPEC: EnclosureSpec = {
   ports: [
     { face: 'N', type: 'usb-c', anchor: 'usb', margin: 0.5 },
   ],
+  closure: { type: 'screw' },
+  screw: { dia: 3.0, pilotDia: 2.5, bossDia: 6.0, headDia: 5.5 }, // M3 self-tapping
   joint: { type: 'openlock-clip', spacing: 20, tolerance: 0.2 },
   lid: { lipDepth: 4.0, lipInset: 1.2, thickness: 2.0 },
+  chamfer: 0.8,
   tolerance: 0.2,
   exports: ['stl', 'scad'],
 };
