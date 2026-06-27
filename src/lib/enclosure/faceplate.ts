@@ -1,7 +1,8 @@
 import type { IR } from '../ir';
 import { bx, cy, tr, rot, uni } from '../ir';
-import type { ComponentType, ComponentSize, PlacedComponent } from './schema';
+import type { ComponentType, ComponentSize, PlacedComponent, EnclosureSpec } from './schema';
 import type { DerivedDims } from './derive';
+import { deriveDims } from './derive';
 
 export type Shape = 'round' | 'rect' | 'slot';
 export interface CatalogEntry { label: string; shape: Shape; default: ComponentSize; }
@@ -44,4 +45,77 @@ export function componentHole(comp: PlacedComponent, d: DerivedDims, lidThicknes
     ]));
   }
   return tr([comp.x, comp.y, zc], cutter);
+}
+
+const EDGE_MARGIN = 3;
+
+export interface Footprint { hw: number; hh: number }
+
+/** Axis-aligned half-extents of a component's footprint on the panel, after rotation. */
+export function componentFootprint(comp: PlacedComponent): Footprint {
+  const size = resolveSize(comp);
+  const shape = COMPONENT_CATALOG[comp.type].shape;
+  let w: number, h: number;
+  if (shape === 'round') {
+    const dia = (size as { dia: number }).dia;
+    return { hw: dia / 2, hh: dia / 2 };
+  } else if (shape === 'rect') {
+    ({ w, h } = size as { w: number; h: number });
+  } else {
+    const { travel, slotW } = size as { travel: number; slotW: number };
+    w = travel + slotW; h = slotW; // capsule bounding box
+  }
+  const rad = (comp.rotation * Math.PI) / 180;
+  const ca = Math.abs(Math.cos(rad)), sa = Math.abs(Math.sin(rad));
+  return { hw: (w * ca + h * sa) / 2, hh: (w * sa + h * ca) / 2 };
+}
+
+export type DiagnosticKind = 'overlap' | 'screw-boss' | 'off-panel';
+export interface Diagnostic { componentId: string; kind: DiagnosticKind; message: string }
+
+export function validateFaceplate(spec: EnclosureSpec): Diagnostic[] {
+  const d = deriveDims(spec);
+  const comps = spec.faceplate.components;
+  const out: Diagnostic[] = [];
+  const fps = comps.map(componentFootprint);
+
+  // off-panel
+  comps.forEach((c, i) => {
+    const f = fps[i];
+    if (Math.abs(c.x) + f.hw > d.outerL / 2 - EDGE_MARGIN ||
+        Math.abs(c.y) + f.hh > d.outerW / 2 - EDGE_MARGIN) {
+      out.push({ componentId: c.id, kind: 'off-panel', message: `${c.type} extends past the panel edge` });
+    }
+  });
+
+  // screw-boss collision (only when screw closure)
+  if (spec.closure.type === 'screw') {
+    const bossR = spec.screw.bossDia / 2;
+    const cx = d.outerL / 2 - bossR, cy0 = d.outerW / 2 - bossR;
+    const corners = [[cx, cy0], [cx, -cy0], [-cx, cy0], [-cx, -cy0]];
+    comps.forEach((c, i) => {
+      const f = fps[i];
+      for (const [bx0, by0] of corners) {
+        // AABB-vs-circle: nearest point on the footprint box to the boss center
+        const nx = Math.max(c.x - f.hw, Math.min(bx0, c.x + f.hw));
+        const ny = Math.max(c.y - f.hh, Math.min(by0, c.y + f.hh));
+        if ((nx - bx0) ** 2 + (ny - by0) ** 2 < bossR ** 2) {
+          out.push({ componentId: c.id, kind: 'screw-boss', message: `${c.type} overlaps a corner screw boss` });
+          break;
+        }
+      }
+    });
+  }
+
+  // pairwise overlap (AABB intersection)
+  for (let i = 0; i < comps.length; i++) {
+    for (let j = i + 1; j < comps.length; j++) {
+      const a = comps[i], b = comps[j], fa = fps[i], fb = fps[j];
+      if (Math.abs(a.x - b.x) < fa.hw + fb.hw && Math.abs(a.y - b.y) < fa.hh + fb.hh) {
+        out.push({ componentId: a.id, kind: 'overlap', message: `${a.type} overlaps ${b.type}` });
+        out.push({ componentId: b.id, kind: 'overlap', message: `${b.type} overlaps ${a.type}` });
+      }
+    }
+  }
+  return out;
 }

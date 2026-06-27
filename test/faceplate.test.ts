@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_SPEC } from '../src/lib/enclosure/schema';
-import { COMPONENT_CATALOG, resolveSize, componentHole } from '../src/lib/enclosure/faceplate';
+import { COMPONENT_CATALOG, resolveSize, componentHole, componentFootprint, validateFaceplate } from '../src/lib/enclosure/faceplate';
 import type { PlacedComponent } from '../src/lib/enclosure/schema';
 import type { DerivedDims } from '../src/lib/enclosure/derive';
 
@@ -81,5 +81,45 @@ describe('componentHole', () => {
     } else {
       throw new Error('slot shape should be translate→rotate→union');
     }
+  });
+});
+
+describe('componentFootprint', () => {
+  it('round footprint is the diameter square regardless of rotation', () => {
+    expect(componentFootprint(at({ type: 'pot', rotation: 37 }))).toEqual({ hw: 3.5, hh: 3.5 });
+  });
+  it('rect footprint swaps with a 90° rotation', () => {
+    const f0 = componentFootprint(at({ type: 'display', rotation: 0 }));
+    const f90 = componentFootprint(at({ type: 'display', rotation: 90 }));
+    expect(f0.hw).toBeCloseTo(12.5); expect(f0.hh).toBeCloseTo(7.5);
+    expect(f90.hw).toBeCloseTo(7.5); expect(f90.hh).toBeCloseTo(12.5);
+  });
+});
+
+describe('validateFaceplate', () => {
+  const withComps = (components: any[]) => ({ ...DEFAULT_SPEC, faceplate: { snap: 2.5, components } });
+
+  it('flags a component that runs off the panel edge', () => {
+    const diags = validateFaceplate(withComps([at({ id: 'a', type: 'pot', x: 40, y: 0 })]));
+    expect(diags.some((d: any) => d.componentId === 'a' && d.kind === 'off-panel')).toBe(true);
+  });
+
+  it('flags a component overlapping a corner screw boss', () => {
+    // default screw boss center ≈ (outerL/2 - bossDia/2, outerW/2 - bossDia/2) = (30, 20)
+    const diags = validateFaceplate(withComps([at({ id: 'b', type: 'pot', x: 30, y: 20 })]));
+    expect(diags.some((d: any) => d.componentId === 'b' && d.kind === 'screw-boss')).toBe(true);
+  });
+
+  it('flags two overlapping components (both ids)', () => {
+    const diags = validateFaceplate(withComps([
+      at({ id: 'p', type: 'pot', x: 0, y: 0 }),
+      at({ id: 'q', type: 'pot', x: 2, y: 0 }),
+    ]));
+    expect(diags.some((d: any) => d.componentId === 'p' && d.kind === 'overlap')).toBe(true);
+    expect(diags.some((d: any) => d.componentId === 'q' && d.kind === 'overlap')).toBe(true);
+  });
+
+  it('returns no diagnostics for a clean central layout', () => {
+    expect(validateFaceplate(withComps([at({ id: 'ok', type: 'led', x: 0, y: 0 })]))).toEqual([]);
   });
 });
