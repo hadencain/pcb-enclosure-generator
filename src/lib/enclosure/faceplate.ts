@@ -91,6 +91,8 @@ export function validateFaceplate(spec: EnclosureSpec): Diagnostic[] {
   // screw-boss collision (only when screw closure)
   if (spec.closure.type === 'screw') {
     const bossR = spec.screw.bossDia / 2;
+    // cornerR covers both the boss column and the lid countersink bore (whichever is larger).
+    const cornerR = Math.max(spec.screw.bossDia, spec.screw.headDia) / 2;
     const cx = d.outerL / 2 - bossR, cy0 = d.outerW / 2 - bossR;
     const corners = [[cx, cy0], [cx, -cy0], [-cx, cy0], [-cx, -cy0]];
     comps.forEach((c, i) => {
@@ -99,7 +101,7 @@ export function validateFaceplate(spec: EnclosureSpec): Diagnostic[] {
         // AABB-vs-circle: nearest point on the footprint box to the boss center
         const nx = Math.max(c.x - f.hw, Math.min(bx0, c.x + f.hw));
         const ny = Math.max(c.y - f.hh, Math.min(by0, c.y + f.hh));
-        if ((nx - bx0) ** 2 + (ny - by0) ** 2 < bossR ** 2) {
+        if ((nx - bx0) ** 2 + (ny - by0) ** 2 < cornerR ** 2) {
           out.push({ componentId: c.id, kind: 'screw-boss', message: `${c.type} overlaps a corner screw boss` });
           break;
         }

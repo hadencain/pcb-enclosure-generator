@@ -122,4 +122,19 @@ describe('validateFaceplate', () => {
   it('returns no diagnostics for a clean central layout', () => {
     expect(validateFaceplate(withComps([at({ id: 'ok', type: 'led', x: 0, y: 0 })]))).toEqual([]);
   });
+
+  it('flags a component overlapping the countersink even when it clears the boss (headDia > bossDia)', () => {
+    const spec = {
+      ...DEFAULT_SPEC,
+      screw: { ...DEFAULT_SPEC.screw, bossDia: 4, headDia: 10 },
+      faceplate: { snap: 2.5, components: [
+        // outer box is 66x46; corner center = (outerL/2 - bossDia/2, outerW/2 - bossDia/2) = (31, 21).
+        // LED Ø5 → footprint hw=hh=2.5. Place at x=26, y=21: nearest AABB point to corner is
+        // (28.5, 21), distance = 2.5 — outside bossR(2) but inside cornerR(max(4,10)/2=5).
+        { id: 'cs', type: 'led' as const, x: 26, y: 21, rotation: 0 },
+      ] },
+    };
+    const diags = validateFaceplate(spec);
+    expect(diags.some(d => d.componentId === 'cs' && d.kind === 'screw-boss')).toBe(true);
+  });
 });

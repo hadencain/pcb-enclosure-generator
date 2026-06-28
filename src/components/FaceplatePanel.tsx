@@ -89,11 +89,11 @@ export function FaceplatePanel({ spec, onChange }: Props) {
         {components.map(c => {
           const { px, py } = toPx(c.x, c.y);
           const shape = COMPONENT_CATALOG[c.type].shape;
-          const sz = resolveSize(c);
           const stroke = badIds.has(c.id) ? 'crimson' : c.id === selected ? '#06c' : '#333';
           const fill = badIds.has(c.id) ? '#fdd' : '#cde';
           const common = { onPointerDown: (e: React.PointerEvent) => onPointerDown(e, c), style: { cursor: 'grab' } as const, stroke, fill };
           if (shape === 'round') {
+            const sz = resolveSize(c);
             return <circle key={c.id} cx={px} cy={py} r={(sz as { dia: number }).dia / 2 * PX_PER_MM} {...common} />;
           }
           const f = componentFootprint({ ...c, rotation: 0 });
