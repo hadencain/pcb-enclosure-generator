@@ -171,7 +171,21 @@ export function Preview3D({ mesh, defaultTheta = 0.4, defaultPhi = -0.5 }: Props
       console.warn('WebGL init failed', e);
     }
 
-    return () => cancelAnimationFrame(rafRef.current);
+    // Size the drawing buffer to the element's display size, and keep it in sync.
+    const resize = () => {
+      const c = canvasRef.current;
+      if (!c) return;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const w = Math.max(1, Math.floor(c.clientWidth * dpr));
+      const h = Math.max(1, Math.floor(c.clientHeight * dpr));
+      if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+      renderFrame();
+    };
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
+    resize();
+
+    return () => { ro.disconnect(); cancelAnimationFrame(rafRef.current); };
   }, []);
 
   // Upload mesh whenever it changes — reuse the single VBO, just stream new data
@@ -197,7 +211,7 @@ export function Preview3D({ mesh, defaultTheta = 0.4, defaultPhi = -0.5 }: Props
     if (!gl || !prog || !vao || !canvas || vtxCount.current === 0) return;
 
     gl.viewport(0, 0, canvas.width, canvas.height);
-    gl.clearColor(0.05, 0.05, 0.07, 1);
+    gl.clearColor(0.039, 0.043, 0.051, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     // Always read from ref so this function is safe to call from any closure age
@@ -268,12 +282,12 @@ export function Preview3D({ mesh, defaultTheta = 0.4, defaultPhi = -0.5 }: Props
   }
 
   return (
-    <div className="preview" style={{ flexDirection: 'column' }}>
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       <canvas
         ref={canvasRef}
         width={360}
         height={480}
-        style={{ maxWidth: '100%', cursor: 'grab' }}
+        style={{ width: '100%', height: '100%', display: 'block', cursor: 'grab' }}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}

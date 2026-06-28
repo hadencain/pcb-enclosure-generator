@@ -11,9 +11,10 @@ const RULER = 22;   // gutter for the mm rulers
 const PAD = 12;
 
 // SVG presentation attributes can't read CSS var()s, so the canvas palette is literal.
+// Monochrome + one accent: accent (steel) marks the selected element only.
 const CO = {
-  geo: '#57e0a3', geoDeep: '#1f3a30', dim: '#e0a33d',
-  ink: '#e8edea', dimDeep: '#7e8884', warn: '#ff5f56', line: '#29322f', lineSoft: '#1d2422',
+  acc: '#6f93b8', ink: '#e9ebee', gray: '#868b92', faint: '#50555c',
+  line: '#2a2e33', lineSoft: '#1e2125', warn: '#e0625c',
 };
 const MONO = "'IBM Plex Mono', monospace";
 const tag = (i: number) => String.fromCharCode(65 + i); // 0 → A
@@ -27,7 +28,7 @@ function sizeLabel(c: PlacedComponent): string {
 
 function Glyph({ shape }: { shape: 'round' | 'rect' | 'slot' }) {
   return (
-    <svg className="glyph" width="13" height="13" viewBox="0 0 13 13" fill="none" stroke={CO.geo} strokeWidth="1.3">
+    <svg className="glyph" width="13" height="13" viewBox="0 0 13 13" fill="none" stroke={CO.gray} strokeWidth="1.3">
       {shape === 'round' && <circle cx="6.5" cy="6.5" r="4" />}
       {shape === 'rect' && <rect x="2" y="3.5" width="9" height="6" />}
       {shape === 'slot' && <rect x="1.5" y="4.5" width="10" height="4" rx="2" />}
@@ -100,21 +101,21 @@ export function FaceplatePanel({ spec, onChange }: Props) {
   // ── selected dimension callouts (draw-in on select) ────────────
   function dims(c: PlacedComponent): React.ReactElement {
     const { px, py } = toPx(c.x, c.y);
-    const dat = toPx(0, 0);
-    const tick = (x: number, y: number) => <line x1={x - 3} y1={y - 3} x2={x + 3} y2={y + 3} stroke={CO.dim} strokeWidth="1" />;
+    const da = toPx(0, 0);
+    const tick = (x: number, y: number) => <line x1={x - 3} y1={y - 3} x2={x + 3} y2={y + 3} stroke={CO.gray} strokeWidth="1" />;
     return (
-      <g className="dim-grp" key={c.id} pointerEvents="none" fontFamily={MONO} fontSize="9.5" fill={CO.dim}>
+      <g className="dim-grp" key={c.id} pointerEvents="none" fontFamily={MONO} fontSize="9.5" fill={CO.gray}>
         {Math.abs(c.x) > 0.01 && <>
-          <line x1={dat.px} y1={py} x2={px} y2={py} stroke={CO.dim} strokeWidth="0.8" strokeDasharray="1 2" />
-          {tick(dat.px, py)}{tick(px, py)}
-          <text x={(dat.px + px) / 2} y={py - 5} textAnchor="middle">X {c.x.toFixed(1)}</text>
+          <line x1={da.px} y1={py} x2={px} y2={py} stroke={CO.gray} strokeWidth="0.8" strokeDasharray="1 2" />
+          {tick(da.px, py)}{tick(px, py)}
+          <text x={(da.px + px) / 2} y={py - 5} textAnchor="middle">X {c.x.toFixed(1)}</text>
         </>}
         {Math.abs(c.y) > 0.01 && <>
-          <line x1={px} y1={dat.py} x2={px} y2={py} stroke={CO.dim} strokeWidth="0.8" strokeDasharray="1 2" />
-          {tick(px, dat.py)}{tick(px, py)}
-          <text x={px + 6} y={(dat.py + py) / 2} dominantBaseline="middle">Y {c.y.toFixed(1)}</text>
+          <line x1={px} y1={da.py} x2={px} y2={py} stroke={CO.gray} strokeWidth="0.8" strokeDasharray="1 2" />
+          {tick(px, da.py)}{tick(px, py)}
+          <text x={px + 6} y={(da.py + py) / 2} dominantBaseline="middle">Y {c.y.toFixed(1)}</text>
         </>}
-        <text x={px} y={py - 11} textAnchor="middle" fill={CO.geo}>{sizeLabel(c)}</text>
+        <text x={px} y={py - 11} textAnchor="middle" fill={CO.ink}>{sizeLabel(c)}</text>
       </g>
     );
   }
@@ -128,28 +129,29 @@ export function FaceplatePanel({ spec, onChange }: Props) {
       const y = p.face === 'N' ? RULER : RULER + H;
       const x1 = toPx(rp.alongCenter - half, 0).px, x2 = toPx(rp.alongCenter + half, 0).px;
       portMarks.push(<g key={`pm${i}`} pointerEvents="none">
-        <line x1={x1} y1={y} x2={x2} y2={y} stroke={CO.dim} strokeWidth="2.5" />
-        <text x={(x1 + x2) / 2} y={p.face === 'N' ? y - 4 : y + 11} fill={CO.dim} fontFamily={MONO} fontSize="8.5" textAnchor="middle">{p.type}</text>
+        <line x1={x1} y1={y} x2={x2} y2={y} stroke={CO.gray} strokeWidth="2.5" />
+        <text x={(x1 + x2) / 2} y={p.face === 'N' ? y - 4 : y + 11} fill={CO.gray} fontFamily={MONO} fontSize="8.5" textAnchor="middle">{p.type}</text>
       </g>);
     } else {
       const x = p.face === 'E' ? RULER + W : RULER;
       const y1 = toPx(0, rp.alongCenter - half).py, y2 = toPx(0, rp.alongCenter + half).py;
-      portMarks.push(<g key={`pm${i}`} pointerEvents="none"><line x1={x} y1={y1} x2={x} y2={y2} stroke={CO.dim} strokeWidth="2.5" /></g>);
+      portMarks.push(<g key={`pm${i}`} pointerEvents="none"><line x1={x} y1={y1} x2={x} y2={y2} stroke={CO.gray} strokeWidth="2.5" /></g>);
     }
   });
 
-  const dat = toPx(0, 0);
-  const sb0 = toPx(-halfL, 0).px + 6;          // scale bar left
-  const sbY = RULER + H - 12;                    // scale bar y
+  const da = toPx(0, 0);
+  const sb0 = toPx(-halfL, 0).px + 6;
+  const sbY = RULER + H - 12;
   const screwClr = (spec.screw.dia + 0.6).toFixed(1);
+  const cutCount = components.length + (spec.closure.type === 'screw' ? 4 : 0);
 
   return (
     <div>
       <div className="workspace-head">
-        <h2>Faceplate Layout</h2>
-        <span className="sub">top view · lid {d.outerL.toFixed(0)}×{d.outerW.toFixed(0)}mm</span>
+        <h2>Faceplate</h2>
+        <span className="sub">lid · top view · {d.outerL.toFixed(0)}×{d.outerW.toFixed(0)}mm</span>
         <span style={{ flex: 1 }} />
-        <div style={{ width: 150 }}><NumberField label="snap" value={snap} step={0.5}
+        <div style={{ width: 142 }}><NumberField label="snap" value={snap} step={0.5}
           onChange={v => onChange({ ...spec, faceplate: { ...spec.faceplate, snap: v } })} /></div>
       </div>
 
@@ -172,18 +174,18 @@ export function FaceplatePanel({ spec, onChange }: Props) {
             onClick={() => setSelected(null)} />
           {grid}
 
-          <line x1={dat.px} y1={RULER} x2={dat.px} y2={RULER + H} stroke={CO.geoDeep} />
-          <line x1={RULER} y1={dat.py} x2={RULER + W} y2={dat.py} stroke={CO.geoDeep} />
+          <line x1={da.px} y1={RULER} x2={da.px} y2={RULER + H} stroke={CO.faint} />
+          <line x1={RULER} y1={da.py} x2={RULER + W} y2={da.py} stroke={CO.faint} />
 
           {majorsX.map(v => { const { px } = toPx(v, 0); return (
             <g key={`rx${v}`} pointerEvents="none">
-              <line x1={px} y1={RULER - 5} x2={px} y2={RULER} stroke={CO.dim} strokeWidth="0.8" opacity="0.7" />
-              <text x={px} y={RULER - 8} fill={CO.dim} fontFamily={MONO} fontSize="8.5" textAnchor="middle" opacity="0.8">{v}</text>
+              <line x1={px} y1={RULER - 5} x2={px} y2={RULER} stroke={CO.gray} strokeWidth="0.8" opacity="0.6" />
+              <text x={px} y={RULER - 8} fill={CO.gray} fontFamily={MONO} fontSize="8.5" textAnchor="middle" opacity="0.75">{v}</text>
             </g>); })}
           {majorsY.map(v => { const { py } = toPx(0, v); return (
             <g key={`ry${v}`} pointerEvents="none">
-              <line x1={RULER - 5} y1={py} x2={RULER} y2={py} stroke={CO.dim} strokeWidth="0.8" opacity="0.7" />
-              <text x={2} y={py} fill={CO.dim} fontFamily={MONO} fontSize="8.5" dominantBaseline="middle" opacity="0.8">{v}</text>
+              <line x1={RULER - 5} y1={py} x2={RULER} y2={py} stroke={CO.gray} strokeWidth="0.8" opacity="0.6" />
+              <text x={2} y={py} fill={CO.gray} fontFamily={MONO} fontSize="8.5" dominantBaseline="middle" opacity="0.75">{v}</text>
             </g>); })}
 
           {portMarks}
@@ -193,22 +195,22 @@ export function FaceplatePanel({ spec, onChange }: Props) {
             const cx = halfL - bossR, cy0 = halfW - bossR;
             return ([[cx, cy0], [cx, -cy0], [-cx, cy0], [-cx, -cy0]] as const).map(([bx, by], i) => {
               const { px, py } = toPx(bx, by);
-              return <circle key={i} cx={px} cy={py} r={bossR * S} fill="none" stroke={CO.dim} strokeWidth="0.8" strokeDasharray="2 2" opacity="0.5" pointerEvents="none" />;
+              return <circle key={i} cx={px} cy={py} r={bossR * S} fill="none" stroke={CO.faint} strokeWidth="0.8" strokeDasharray="2 2" pointerEvents="none" />;
             });
           })()}
 
           {/* datum crosshair */}
           <g pointerEvents="none">
-            <circle cx={dat.px} cy={dat.py} r="3" fill="none" stroke={CO.geo} strokeWidth="0.8" />
-            <line x1={dat.px - 6} y1={dat.py} x2={dat.px + 6} y2={dat.py} stroke={CO.geo} strokeWidth="0.6" />
-            <line x1={dat.px} y1={dat.py - 6} x2={dat.px} y2={dat.py + 6} stroke={CO.geo} strokeWidth="0.6" />
+            <circle cx={da.px} cy={da.py} r="3" fill="none" stroke={CO.gray} strokeWidth="0.8" />
+            <line x1={da.px - 6} y1={da.py} x2={da.px + 6} y2={da.py} stroke={CO.gray} strokeWidth="0.6" />
+            <line x1={da.px} y1={da.py - 6} x2={da.px} y2={da.py + 6} stroke={CO.gray} strokeWidth="0.6" />
           </g>
 
           {/* scale bar: 10 mm */}
-          <g pointerEvents="none" fontFamily={MONO} fill={CO.dim}>
-            <line x1={sb0} y1={sbY} x2={sb0 + 10 * S} y2={sbY} stroke={CO.dim} strokeWidth="1" />
-            <line x1={sb0} y1={sbY - 3} x2={sb0} y2={sbY + 3} stroke={CO.dim} strokeWidth="1" />
-            <line x1={sb0 + 10 * S} y1={sbY - 3} x2={sb0 + 10 * S} y2={sbY + 3} stroke={CO.dim} strokeWidth="1" />
+          <g pointerEvents="none" fontFamily={MONO} fill={CO.gray}>
+            <line x1={sb0} y1={sbY} x2={sb0 + 10 * S} y2={sbY} stroke={CO.gray} strokeWidth="1" />
+            <line x1={sb0} y1={sbY - 3} x2={sb0} y2={sbY + 3} stroke={CO.gray} strokeWidth="1" />
+            <line x1={sb0 + 10 * S} y1={sbY - 3} x2={sb0 + 10 * S} y2={sbY + 3} stroke={CO.gray} strokeWidth="1" />
             <text x={sb0} y={sbY - 5} fontSize="8.5">10 mm</text>
           </g>
 
@@ -218,13 +220,13 @@ export function FaceplatePanel({ spec, onChange }: Props) {
             const shape = COMPONENT_CATALOG[c.type].shape;
             const on = c.id === selected, bad = badIds.has(c.id);
             const f = componentFootprint({ ...c, rotation: 0 });
-            const stroke = bad ? CO.warn : on ? CO.geo : CO.ink;
-            const fill = bad ? 'rgba(255,95,86,0.10)' : on ? 'rgba(87,224,163,0.12)' : 'rgba(232,237,234,0.06)';
+            const stroke = bad ? CO.warn : on ? CO.acc : CO.ink;
+            const fill = bad ? 'rgba(224,98,92,0.10)' : on ? 'rgba(111,147,184,0.16)' : 'rgba(233,235,238,0.05)';
             const common = {
               onPointerDown: (e: React.PointerEvent) => onPointerDown(e, c),
               onPointerEnter: () => setHover(c.id),
               onPointerLeave: () => setHover(h => (h === c.id ? null : h)),
-              style: { cursor: 'grab' } as const, stroke, fill, strokeWidth: on ? 1.4 : 1,
+              style: { cursor: 'grab' } as const, stroke, fill, strokeWidth: on ? 1.5 : 1,
             };
             const shapeEl = shape === 'round'
               ? <circle cx={px} cy={py} r={(resolveSize(c) as { dia: number }).dia / 2 * S} {...common} />
@@ -233,7 +235,7 @@ export function FaceplatePanel({ spec, onChange }: Props) {
             return (
               <g key={c.id}>
                 {shapeEl}
-                <text x={px + f.hw * S + 4} y={py - f.hh * S - 2} fill={on ? CO.geo : CO.dimDeep} fontFamily={MONO} fontSize="9" pointerEvents="none">{tag(i)}</text>
+                <text x={px + f.hw * S + 4} y={py - f.hh * S - 2} fill={on ? CO.acc : CO.faint} fontFamily={MONO} fontSize="9" pointerEvents="none">{tag(i)}</text>
                 {hover === c.id && !on && (
                   <text x={px} y={py + f.hh * S + 12} fill={CO.ink} fontFamily={MONO} fontSize="8.5" textAnchor="middle" pointerEvents="none">{COMPONENT_CATALOG[c.type].label}</text>
                 )}
@@ -244,23 +246,21 @@ export function FaceplatePanel({ spec, onChange }: Props) {
           {sel && dims(sel)}
         </svg>
 
-        {/* drawing title block */}
         <div className="titleblock">
           <div className="tb mk"><span className="k">PROJECT</span><span className="v">ENCLOSURE</span></div>
           <div className="tb"><span className="k">PART</span><span className="v">FACEPLATE</span></div>
           <div className="tb"><span className="k">VIEW</span><span className="v">TOP</span></div>
           <div className="tb"><span className="k">UNITS</span><span className="v">MM</span></div>
           <div className="tb"><span className="k">PANEL</span><span className="v">{d.outerL.toFixed(0)}×{d.outerW.toFixed(0)}</span></div>
-          <div className="tb"><span className="k">HOLES</span><span className="v">{components.length + (spec.closure.type === 'screw' ? 4 : 0)}</span></div>
+          <div className="tb"><span className="k">HOLES</span><span className="v">{cutCount}</span></div>
         </div>
       </div>
 
-      {/* ── Engineering output ──────────────────────────────────── */}
       <div className="inspect">
         {sel ? (
           <div className="callout">
             <div className="callout-h">
-              <span className="name"><span style={{ color: CO.geo, fontFamily: MONO, marginRight: 8 }}>{tag(selIdx)}</span>{COMPONENT_CATALOG[sel.type].label}</span>
+              <span className="name"><span style={{ color: CO.acc, fontFamily: MONO, marginRight: 8 }}>{tag(selIdx)}</span>{COMPONENT_CATALOG[sel.type].label}</span>
               <span className="tag">{sizeLabel(sel)}</span>
             </div>
             <div className="callout-body">
@@ -277,7 +277,7 @@ export function FaceplatePanel({ spec, onChange }: Props) {
         )}
 
         <div className="eng">
-          <div className="eng-h">Hole Schedule <span className="count">{components.length + (spec.closure.type === 'screw' ? 4 : 0)} cuts</span></div>
+          <div className="eng-h">Hole Schedule <span className="count">{cutCount} cuts</span></div>
           <table className="sched">
             <thead><tr><th>Tag</th><th>Item</th><th>Size</th><th className="num">X</th><th className="num">Y</th><th className="num">Rot</th></tr></thead>
             <tbody>
@@ -285,7 +285,7 @@ export function FaceplatePanel({ spec, onChange }: Props) {
                 <tr><td className="tg">—</td><td>Screw ×4</td><td className="dim">⌀{screwClr} c'sink ⌀{spec.screw.headDia.toFixed(1)}</td><td className="num">·</td><td className="num">·</td><td className="num">·</td></tr>
               )}
               {components.length === 0 && spec.closure.type !== 'screw' && (
-                <tr><td colSpan={6} style={{ color: CO.dimDeep }}>no cuts yet</td></tr>
+                <tr><td colSpan={6} style={{ color: CO.faint }}>no cuts yet</td></tr>
               )}
               {components.map((c, i) => (
                 <tr key={c.id} className={`click${c.id === selected ? ' on' : ''}${badIds.has(c.id) ? ' bad' : ''}`} onClick={() => setSelected(c.id)}>

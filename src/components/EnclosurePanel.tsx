@@ -3,7 +3,7 @@ import { Preview3D } from './Preview3D';
 import { FaceplatePanel } from './FaceplatePanel';
 import { NumberField, Seg } from './Field';
 import { DEFAULT_SPEC, type EnclosureSpec } from '../lib/enclosure/schema';
-import { enclosureToMeshes, exportEnclosure } from '../lib/enclosure/export';
+import { enclosureToMeshes, exportEnclosure, type ExportWhich } from '../lib/enclosure/export';
 import { deriveDims } from '../lib/enclosure/derive';
 import type { Mesh } from '../lib/types';
 
@@ -22,10 +22,20 @@ function meshStats(m: Mesh): { vol: number; dims: [number, number, number]; tris
   return { vol: Math.abs(vol) / 6, dims: [mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]], tris: m.tris.length };
 }
 
+/** Merge body + lid into one mesh for the assembly view; the lid is lifted by `gap`. */
+function combineMeshes(body: Mesh, lid: Mesh, gap: number): Mesh {
+  const verts = body.verts.slice();
+  const tris = body.tris.slice();
+  const off = body.verts.length;
+  for (const v of lid.verts) verts.push([v[0], v[1], v[2] + gap]);
+  for (const t of lid.tris) tris.push([t[0] + off, t[1] + off, t[2] + off]);
+  return { verts, tris };
+}
+
 export function EnclosurePanel() {
   const [spec, setSpec] = useState<EnclosureSpec>(DEFAULT_SPEC);
   const [parts, setParts] = useState<{ body: Mesh; lid: Mesh } | null>(null);
-  const [view, setView] = useState<'body' | 'lid'>('body');
+  const [exploded, setExploded] = useState(true);
   const [building, setBuilding] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -56,38 +66,37 @@ export function EnclosurePanel() {
   const patchClear = (k: keyof EnclosureSpec['clearances'], v: number) =>
     setSpec(s => ({ ...s, clearances: { ...s.clearances, [k]: v } }));
 
-  async function handleExport() {
+  async function handleExport(which: ExportWhich) {
     setExporting(true); setErr(null);
-    try { await exportEnclosure(spec); }
+    try { await exportEnclosure(spec, which); }
     catch (e) { setErr(String(e)); }
     finally { setExporting(false); }
   }
 
-  const shown = parts ? parts[view] : null;
+  const gap = exploded ? Math.max(18, d.outerH * 0.5) : 0;
+  const assembly = parts ? combineMeshes(parts.body, parts.lid, gap) : null;
 
   return (
     <div className="ws">
       <header className="topbar">
         <div className="brand"><span className="mk">ENCLOSURE</span><span className="dot">/</span>WORKSTATION</div>
-        <span className="spec">
-          pcb {spec.pcb.length}×{spec.pcb.width} · box {d.outerL.toFixed(0)}×{d.outerW.toFixed(0)}×{d.outerH.toFixed(0)}mm
-        </span>
+        <span className="spec">box {d.outerL.toFixed(0)}×{d.outerW.toFixed(0)}×{d.outerH.toFixed(0)} mm</span>
         <span className="grow" />
         <span className={building ? 'live on' : 'live'}><span className="dot" />{building ? 'rebuilding' : 'up to date'}</span>
-        <button className="btn primary" onClick={handleExport} disabled={exporting || building}>{exporting ? 'Exporting…' : 'Export STL / SCAD'}</button>
+        <button className="btn primary" onClick={() => handleExport('both')} disabled={exporting || building}>{exporting ? 'Exporting…' : 'Export all'}</button>
       </header>
 
       <div className="stage">
         <aside className="rail">
           <section className="sec">
-            <div className="sec-h">PCB</div>
+            <div className="sec-h"><span className="step">01</span>Board</div>
             <NumberField label="length" value={spec.pcb.length} onChange={v => patchPcb('length', v)} />
             <NumberField label="width" value={spec.pcb.width} onChange={v => patchPcb('width', v)} />
-            <NumberField label="board thickness" value={spec.pcb.height} onChange={v => patchPcb('height', v)} />
+            <NumberField label="thickness" value={spec.pcb.height} onChange={v => patchPcb('height', v)} />
           </section>
 
           <section className="sec">
-            <div className="sec-h">Enclosure</div>
+            <div className="sec-h"><span className="step">02</span>Enclosure</div>
             <NumberField label="wall" value={spec.clearances.wall} onChange={v => patchClear('wall', v)} />
             <NumberField label="floor" value={spec.clearances.floor} onChange={v => patchClear('floor', v)} />
             <NumberField label="ceiling" value={spec.clearances.ceiling} onChange={v => patchClear('ceiling', v)} />
@@ -95,7 +104,7 @@ export function EnclosurePanel() {
           </section>
 
           <section className="sec">
-            <div className="sec-h">Closure</div>
+            <div className="sec-h"><span className="step">03</span>Closure</div>
             <div style={{ marginBottom: 9 }}>
               <Seg
                 value={spec.closure.type}
@@ -113,30 +122,24 @@ export function EnclosurePanel() {
           </section>
 
           <section className="sec">
-            <div className="sec-h">Fit</div>
+            <div className="sec-h"><span className="step">04</span>Fit</div>
             <NumberField label="tolerance" value={spec.tolerance}
               onChange={v => setSpec(s => ({ ...s, tolerance: v, joint: { ...s.joint, tolerance: v } }))} />
             <NumberField label="chamfer" value={spec.chamfer} onChange={v => setSpec(s => ({ ...s, chamfer: v }))} />
           </section>
         </aside>
 
-        <main className="center">
-          <FaceplatePanel spec={spec} onChange={setSpec} />
-        </main>
-
-        <aside className="preview-col">
+        <section className="render-col">
           <div className="pv-h">
-            <span className="lbl">Solid preview</span>
-            <div className="pv-seg">
-              <button className={view === 'body' ? 'on' : ''} onClick={() => setView('body')}>Body</button>
-              <button className={view === 'lid' ? 'on' : ''} onClick={() => setView('lid')}>Lid</button>
-            </div>
+            <span className="lbl">Assembly</span>
+            <button className={`btn toggle${exploded ? ' on' : ''}`} style={{ height: 24, padding: '0 10px', fontSize: 11 }}
+              onClick={() => setExploded(e => !e)}>Exploded</button>
             <span className="grow" />
             <span className={building ? 'live on' : 'live'}><span className="dot" /></span>
           </div>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-            <Preview3D mesh={shown} />
-            {!shown && <span className="stat" style={{ textAlign: 'center', paddingBottom: 10 }}>building…</span>}
+          <div className="render-stage">
+            <Preview3D mesh={assembly} />
+            {!assembly && <span className="stat" style={{ position: 'absolute' }}>building…</span>}
           </div>
           {parts && (() => {
             const b = meshStats(parts.body), l = meshStats(parts.lid);
@@ -155,8 +158,13 @@ export function EnclosurePanel() {
           })()}
           {err && <div className="pv-err">{err}</div>}
           <div className="pv-actions">
-            <button className="btn primary" onClick={handleExport} disabled={exporting || building}>{exporting ? 'Exporting…' : 'Export STL / SCAD'}</button>
+            <button className="btn" onClick={() => handleExport('body')} disabled={exporting || building}>Export body</button>
+            <button className="btn" onClick={() => handleExport('lid')} disabled={exporting || building}>Export lid</button>
           </div>
+        </section>
+
+        <aside className="faceplate-col">
+          <FaceplatePanel spec={spec} onChange={setSpec} />
         </aside>
       </div>
     </div>

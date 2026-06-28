@@ -40,20 +40,20 @@ export function triggerDownload(filename: string, data: BlobPart, mime: string):
   URL.revokeObjectURL(url);
 }
 
-export async function exportEnclosure(spec: EnclosureSpec): Promise<void> {
+export type ExportWhich = 'both' | 'body' | 'lid';
+
+export async function exportEnclosure(spec: EnclosureSpec, which: ExportWhich = 'both'): Promise<void> {
   // Build the IR once, lay it out flat for printing, then derive mesh and scad.
   const ir = printLayout(spec, buildEnclosure(spec));
+  const wantBody = which === 'both' || which === 'body';
+  const wantLid = which === 'both' || which === 'lid';
 
   if (spec.exports.includes('stl')) {
-    const body = await irToMesh(ir.body);
-    const lid = await irToMesh(ir.lid);
-    triggerDownload('enclosure_body.stl', buildSTL(body), 'application/octet-stream');
-    triggerDownload('enclosure_lid.stl', buildSTL(lid), 'application/octet-stream');
+    if (wantBody) triggerDownload('enclosure_body.stl', buildSTL(await irToMesh(ir.body)), 'application/octet-stream');
+    if (wantLid) triggerDownload('enclosure_lid.stl', buildSTL(await irToMesh(ir.lid)), 'application/octet-stream');
   }
   if (spec.exports.includes('scad')) {
-    const body = emitScad(ir.body);
-    const lid = emitScad(ir.lid);
-    triggerDownload('enclosure_body.scad', body, 'text/plain');
-    triggerDownload('enclosure_lid.scad', lid, 'text/plain');
+    if (wantBody) triggerDownload('enclosure_body.scad', emitScad(ir.body), 'text/plain');
+    if (wantLid) triggerDownload('enclosure_lid.scad', emitScad(ir.lid), 'text/plain');
   }
 }
