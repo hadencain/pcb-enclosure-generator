@@ -1,34 +1,65 @@
 import { useRef, useState } from 'react';
 import type { EnclosureSpec, PlacedComponent, ComponentType } from '../lib/enclosure/schema';
 import { COMPONENT_CATALOG, resolveSize, componentFootprint, validateFaceplate } from '../lib/enclosure/faceplate';
-import { deriveDims } from '../lib/enclosure/derive';
+import { deriveDims, resolvePort } from '../lib/enclosure/derive';
+import { NumberField } from './Field';
 
 interface Props { spec: EnclosureSpec; onChange: (s: EnclosureSpec) => void; }
 
-const PX_PER_MM = 4;
+const S = 6;        // px per mm
+const RULER = 22;   // gutter for the mm rulers
+const PAD = 12;
+
+// SVG presentation attributes can't read CSS var()s, so the canvas palette is literal.
+const CO = {
+  geo: '#57e0a3', geoDeep: '#1f3a30', dim: '#e0a33d',
+  ink: '#e8edea', dimDeep: '#7e8884', warn: '#ff5f56', line: '#29322f', lineSoft: '#1d2422',
+};
+const MONO = "'IBM Plex Mono', monospace";
+const tag = (i: number) => String.fromCharCode(65 + i); // 0 → A
+
+function sizeLabel(c: PlacedComponent): string {
+  const sz = resolveSize(c);
+  if ('dia' in sz) return `⌀${sz.dia.toFixed(1)}`;
+  if ('w' in sz) return `${sz.w.toFixed(1)}×${sz.h.toFixed(1)}`;
+  return `slot ${sz.travel.toFixed(0)}×${sz.slotW.toFixed(1)}`;
+}
+
+function Glyph({ shape }: { shape: 'round' | 'rect' | 'slot' }) {
+  return (
+    <svg className="glyph" width="13" height="13" viewBox="0 0 13 13" fill="none" stroke={CO.geo} strokeWidth="1.3">
+      {shape === 'round' && <circle cx="6.5" cy="6.5" r="4" />}
+      {shape === 'rect' && <rect x="2" y="3.5" width="9" height="6" />}
+      {shape === 'slot' && <rect x="1.5" y="4.5" width="10" height="4" rx="2" />}
+    </svg>
+  );
+}
 
 export function FaceplatePanel({ spec, onChange }: Props) {
   const d = deriveDims(spec);
   const { snap, components } = spec.faceplate;
   const [selected, setSelected] = useState<string | null>(null);
+  const [hover, setHover] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ id: string; dx: number; dy: number } | null>(null);
 
-  const W = d.outerL * PX_PER_MM, H = d.outerW * PX_PER_MM;
-  // panel mm (x right, y up) → svg px (origin top-left, y down)
-  const toPx = (x: number, y: number) => ({ px: W / 2 + x * PX_PER_MM, py: H / 2 - y * PX_PER_MM });
-  const toMm = (px: number, py: number) => ({ x: (px - W / 2) / PX_PER_MM, y: (H / 2 - py) / PX_PER_MM });
+  const halfL = d.outerL / 2, halfW = d.outerW / 2;
+  const W = d.outerL * S, H = d.outerW * S;
+  const SVGW = RULER + W + PAD, SVGH = RULER + H + PAD;
+  const toPx = (x: number, y: number) => ({ px: RULER + W / 2 + x * S, py: RULER + H / 2 - y * S });
+  const toMm = (px: number, py: number) => ({ x: (px - RULER - W / 2) / S, y: (H / 2 - (py - RULER)) / S });
   const snapMm = (v: number) => (snap > 0 ? Math.round(v / snap) * snap : v);
 
   const diags = validateFaceplate(spec);
   const badIds = new Set(diags.map(x => x.componentId));
+  const uniqDiags = diags.filter((x, i, a) => a.findIndex(y => y.componentId === x.componentId && y.kind === x.kind) === i);
+  const sel = components.find(c => c.id === selected) ?? null;
+  const selIdx = components.findIndex(c => c.id === selected);
 
-  function setComponents(next: PlacedComponent[]) {
+  const setComponents = (next: PlacedComponent[]) =>
     onChange({ ...spec, faceplate: { ...spec.faceplate, components: next } });
-  }
-  function patch(id: string, p: Partial<PlacedComponent>) {
+  const patch = (id: string, p: Partial<PlacedComponent>) =>
     setComponents(components.map(c => (c.id === id ? { ...c, ...p } : c)));
-  }
   function add(type: ComponentType) {
     const c: PlacedComponent = { id: crypto.randomUUID(), type, x: 0, y: 0, rotation: 0 };
     setComponents([...components, c]);
@@ -42,86 +73,242 @@ export function FaceplatePanel({ spec, onChange }: Props) {
   function onPointerDown(e: React.PointerEvent, c: PlacedComponent) {
     e.stopPropagation();
     setSelected(c.id);
-    const rect = svgRef.current!.getBoundingClientRect();
-    const { x, y } = toMm(e.clientX - rect.left, e.clientY - rect.top);
+    const r = svgRef.current!.getBoundingClientRect();
+    const { x, y } = toMm(e.clientX - r.left, e.clientY - r.top);
     drag.current = { id: c.id, dx: c.x - x, dy: c.y - y };
     (e.target as Element).setPointerCapture(e.pointerId);
   }
   function onPointerMove(e: React.PointerEvent) {
     if (!drag.current) return;
-    const rect = svgRef.current!.getBoundingClientRect();
-    const { x, y } = toMm(e.clientX - rect.left, e.clientY - rect.top);
+    const r = svgRef.current!.getBoundingClientRect();
+    const { x, y } = toMm(e.clientX - r.left, e.clientY - r.top);
     patch(drag.current.id, { x: snapMm(x + drag.current.dx), y: snapMm(y + drag.current.dy) });
   }
-  function onPointerUp() { drag.current = null; }
+  const onPointerUp = () => { drag.current = null; };
 
-  const sel = components.find(c => c.id === selected) ?? null;
-  const gridLines = [];
-  if (snap > 0) {
-    for (let mx = 0; mx <= d.outerL / 2; mx += snap) {
-      for (const sx of [mx, -mx]) { const { px } = toPx(sx, 0); gridLines.push(<line key={`vx${sx}`} x1={px} y1={0} x2={px} y2={H} stroke="#eee" />); }
-    }
-    for (let my = 0; my <= d.outerW / 2; my += snap) {
-      for (const sy of [my, -my]) { const { py } = toPx(0, sy); gridLines.push(<line key={`hy${sy}`} x1={0} y1={py} x2={W} y2={py} stroke="#eee" />); }
-    }
+  // ── rulers + grid ──────────────────────────────────────────────
+  const majorsX: number[] = [];
+  for (let v = -Math.floor(halfL / 10) * 10; v <= halfL; v += 10) majorsX.push(v);
+  const majorsY: number[] = [];
+  for (let v = -Math.floor(halfW / 10) * 10; v <= halfW; v += 10) majorsY.push(v);
+  const grid: React.ReactElement[] = [];
+  if (snap > 0 && snap * S >= 4) {
+    for (let v = snap; v <= halfL; v += snap) for (const sx of [v, -v]) { const { px } = toPx(sx, 0); grid.push(<line key={`gx${sx}`} x1={px} y1={RULER} x2={px} y2={RULER + H} stroke={CO.lineSoft} />); }
+    for (let v = snap; v <= halfW; v += snap) for (const sy of [v, -v]) { const { py } = toPx(0, sy); grid.push(<line key={`gy${sy}`} x1={RULER} y1={py} x2={RULER + W} y2={py} stroke={CO.lineSoft} />); }
   }
 
+  // ── selected dimension callouts (draw-in on select) ────────────
+  function dims(c: PlacedComponent): React.ReactElement {
+    const { px, py } = toPx(c.x, c.y);
+    const dat = toPx(0, 0);
+    const tick = (x: number, y: number) => <line x1={x - 3} y1={y - 3} x2={x + 3} y2={y + 3} stroke={CO.dim} strokeWidth="1" />;
+    return (
+      <g className="dim-grp" key={c.id} pointerEvents="none" fontFamily={MONO} fontSize="9.5" fill={CO.dim}>
+        {Math.abs(c.x) > 0.01 && <>
+          <line x1={dat.px} y1={py} x2={px} y2={py} stroke={CO.dim} strokeWidth="0.8" strokeDasharray="1 2" />
+          {tick(dat.px, py)}{tick(px, py)}
+          <text x={(dat.px + px) / 2} y={py - 5} textAnchor="middle">X {c.x.toFixed(1)}</text>
+        </>}
+        {Math.abs(c.y) > 0.01 && <>
+          <line x1={px} y1={dat.py} x2={px} y2={py} stroke={CO.dim} strokeWidth="0.8" strokeDasharray="1 2" />
+          {tick(px, dat.py)}{tick(px, py)}
+          <text x={px + 6} y={(dat.py + py) / 2} dominantBaseline="middle">Y {c.y.toFixed(1)}</text>
+        </>}
+        <text x={px} y={py - 11} textAnchor="middle" fill={CO.geo}>{sizeLabel(c)}</text>
+      </g>
+    );
+  }
+
+  // ── port reference markers ─────────────────────────────────────
+  const portMarks: React.ReactElement[] = [];
+  spec.ports.forEach((p, i) => {
+    let rp; try { rp = resolvePort(spec, p, d); } catch { return; }
+    const half = rp.openW / 2;
+    if (p.face === 'N' || p.face === 'S') {
+      const y = p.face === 'N' ? RULER : RULER + H;
+      const x1 = toPx(rp.alongCenter - half, 0).px, x2 = toPx(rp.alongCenter + half, 0).px;
+      portMarks.push(<g key={`pm${i}`} pointerEvents="none">
+        <line x1={x1} y1={y} x2={x2} y2={y} stroke={CO.dim} strokeWidth="2.5" />
+        <text x={(x1 + x2) / 2} y={p.face === 'N' ? y - 4 : y + 11} fill={CO.dim} fontFamily={MONO} fontSize="8.5" textAnchor="middle">{p.type}</text>
+      </g>);
+    } else {
+      const x = p.face === 'E' ? RULER + W : RULER;
+      const y1 = toPx(0, rp.alongCenter - half).py, y2 = toPx(0, rp.alongCenter + half).py;
+      portMarks.push(<g key={`pm${i}`} pointerEvents="none"><line x1={x} y1={y1} x2={x} y2={y2} stroke={CO.dim} strokeWidth="2.5" /></g>);
+    }
+  });
+
+  const dat = toPx(0, 0);
+  const sb0 = toPx(-halfL, 0).px + 6;          // scale bar left
+  const sbY = RULER + H - 12;                    // scale bar y
+  const screwClr = (spec.screw.dia + 0.6).toFixed(1);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <h3>Faceplate (top view)</h3>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+    <div>
+      <div className="workspace-head">
+        <h2>Faceplate Layout</h2>
+        <span className="sub">top view · lid {d.outerL.toFixed(0)}×{d.outerW.toFixed(0)}mm</span>
+        <span style={{ flex: 1 }} />
+        <div style={{ width: 150 }}><NumberField label="snap" value={snap} step={0.5}
+          onChange={v => onChange({ ...spec, faceplate: { ...spec.faceplate, snap: v } })} /></div>
+      </div>
+
+      <div className="palette">
         {(Object.keys(COMPONENT_CATALOG) as ComponentType[]).map(t => (
-          <button key={t} onClick={() => add(t)}>+ {COMPONENT_CATALOG[t].label}</button>
+          <button key={t} className="chip" onClick={() => add(t)}>
+            <Glyph shape={COMPONENT_CATALOG[t].shape} />
+            {COMPONENT_CATALOG[t].label}
+            <span className="plus">+</span>
+          </button>
         ))}
       </div>
-      <svg ref={svgRef} width={W} height={H} style={{ border: '1px solid #999', background: '#fafafa', touchAction: 'none' }}
-        onPointerMove={onPointerMove} onPointerUp={onPointerUp} onClick={() => setSelected(null)}>
-        {gridLines}
-        <rect x={0} y={0} width={W} height={H} fill="none" stroke="#333" />
-        {spec.closure.type === 'screw' && (() => {
-          const bossR = spec.screw.bossDia / 2;
-          const cx = d.outerL / 2 - bossR, cy0 = d.outerW / 2 - bossR;
-          return ([[cx, cy0], [cx, -cy0], [-cx, cy0], [-cx, -cy0]] as const).map(([bx, by], i) => {
-            const { px, py } = toPx(bx, by);
-            return <circle key={i} cx={px} cy={py} r={bossR * PX_PER_MM} fill="#fde" stroke="#c9a" />;
-          });
-        })()}
-        {components.map(c => {
-          const { px, py } = toPx(c.x, c.y);
-          const shape = COMPONENT_CATALOG[c.type].shape;
-          const stroke = badIds.has(c.id) ? 'crimson' : c.id === selected ? '#06c' : '#333';
-          const fill = badIds.has(c.id) ? '#fdd' : '#cde';
-          const common = { onPointerDown: (e: React.PointerEvent) => onPointerDown(e, c), style: { cursor: 'grab' } as const, stroke, fill };
-          if (shape === 'round') {
-            const sz = resolveSize(c);
-            return <circle key={c.id} cx={px} cy={py} r={(sz as { dia: number }).dia / 2 * PX_PER_MM} {...common} />;
-          }
-          const f = componentFootprint({ ...c, rotation: 0 });
-          return <rect key={c.id} x={px - f.hw * PX_PER_MM} y={py - f.hh * PX_PER_MM}
-            width={f.hw * 2 * PX_PER_MM} height={f.hh * 2 * PX_PER_MM}
-            transform={`rotate(${-c.rotation} ${px} ${py})`} {...common} />;
-        })}
-      </svg>
-      <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        snap (mm)
-        <input type="number" step="0.5" value={snap} style={{ width: 70 }}
-          onChange={e => onChange({ ...spec, faceplate: { ...spec.faceplate, snap: parseFloat(e.target.value) || 0 } })} />
-      </label>
-      {sel && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid #ddd', paddingTop: 6 }}>
-          <strong>{COMPONENT_CATALOG[sel.type].label}</strong>
-          <label>X <input type="number" step="0.5" value={sel.x} onChange={e => patch(sel.id, { x: parseFloat(e.target.value) || 0 })} /></label>
-          <label>Y <input type="number" step="0.5" value={sel.y} onChange={e => patch(sel.id, { y: parseFloat(e.target.value) || 0 })} /></label>
-          <label>rotation° <input type="number" step="5" value={sel.rotation} onChange={e => patch(sel.id, { rotation: parseFloat(e.target.value) || 0 })} /></label>
-          <button onClick={() => remove(sel.id)}>Delete</button>
+
+      <div className="draft">
+        <span className="corner-tag">panel · mm · top</span>
+        <svg ref={svgRef} width={SVGW} height={SVGH}
+          onPointerMove={onPointerMove} onPointerUp={onPointerUp}
+          onClick={e => { if (e.target === e.currentTarget) setSelected(null); }}>
+          <rect x={RULER} y={RULER} width={W} height={H} fill="none" stroke={CO.line}
+            onClick={() => setSelected(null)} />
+          {grid}
+
+          <line x1={dat.px} y1={RULER} x2={dat.px} y2={RULER + H} stroke={CO.geoDeep} />
+          <line x1={RULER} y1={dat.py} x2={RULER + W} y2={dat.py} stroke={CO.geoDeep} />
+
+          {majorsX.map(v => { const { px } = toPx(v, 0); return (
+            <g key={`rx${v}`} pointerEvents="none">
+              <line x1={px} y1={RULER - 5} x2={px} y2={RULER} stroke={CO.dim} strokeWidth="0.8" opacity="0.7" />
+              <text x={px} y={RULER - 8} fill={CO.dim} fontFamily={MONO} fontSize="8.5" textAnchor="middle" opacity="0.8">{v}</text>
+            </g>); })}
+          {majorsY.map(v => { const { py } = toPx(0, v); return (
+            <g key={`ry${v}`} pointerEvents="none">
+              <line x1={RULER - 5} y1={py} x2={RULER} y2={py} stroke={CO.dim} strokeWidth="0.8" opacity="0.7" />
+              <text x={2} y={py} fill={CO.dim} fontFamily={MONO} fontSize="8.5" dominantBaseline="middle" opacity="0.8">{v}</text>
+            </g>); })}
+
+          {portMarks}
+
+          {spec.closure.type === 'screw' && (() => {
+            const bossR = spec.screw.bossDia / 2;
+            const cx = halfL - bossR, cy0 = halfW - bossR;
+            return ([[cx, cy0], [cx, -cy0], [-cx, cy0], [-cx, -cy0]] as const).map(([bx, by], i) => {
+              const { px, py } = toPx(bx, by);
+              return <circle key={i} cx={px} cy={py} r={bossR * S} fill="none" stroke={CO.dim} strokeWidth="0.8" strokeDasharray="2 2" opacity="0.5" pointerEvents="none" />;
+            });
+          })()}
+
+          {/* datum crosshair */}
+          <g pointerEvents="none">
+            <circle cx={dat.px} cy={dat.py} r="3" fill="none" stroke={CO.geo} strokeWidth="0.8" />
+            <line x1={dat.px - 6} y1={dat.py} x2={dat.px + 6} y2={dat.py} stroke={CO.geo} strokeWidth="0.6" />
+            <line x1={dat.px} y1={dat.py - 6} x2={dat.px} y2={dat.py + 6} stroke={CO.geo} strokeWidth="0.6" />
+          </g>
+
+          {/* scale bar: 10 mm */}
+          <g pointerEvents="none" fontFamily={MONO} fill={CO.dim}>
+            <line x1={sb0} y1={sbY} x2={sb0 + 10 * S} y2={sbY} stroke={CO.dim} strokeWidth="1" />
+            <line x1={sb0} y1={sbY - 3} x2={sb0} y2={sbY + 3} stroke={CO.dim} strokeWidth="1" />
+            <line x1={sb0 + 10 * S} y1={sbY - 3} x2={sb0 + 10 * S} y2={sbY + 3} stroke={CO.dim} strokeWidth="1" />
+            <text x={sb0} y={sbY - 5} fontSize="8.5">10 mm</text>
+          </g>
+
+          {/* components + tags + hover labels */}
+          {components.map((c, i) => {
+            const { px, py } = toPx(c.x, c.y);
+            const shape = COMPONENT_CATALOG[c.type].shape;
+            const on = c.id === selected, bad = badIds.has(c.id);
+            const f = componentFootprint({ ...c, rotation: 0 });
+            const stroke = bad ? CO.warn : on ? CO.geo : CO.ink;
+            const fill = bad ? 'rgba(255,95,86,0.10)' : on ? 'rgba(87,224,163,0.12)' : 'rgba(232,237,234,0.06)';
+            const common = {
+              onPointerDown: (e: React.PointerEvent) => onPointerDown(e, c),
+              onPointerEnter: () => setHover(c.id),
+              onPointerLeave: () => setHover(h => (h === c.id ? null : h)),
+              style: { cursor: 'grab' } as const, stroke, fill, strokeWidth: on ? 1.4 : 1,
+            };
+            const shapeEl = shape === 'round'
+              ? <circle cx={px} cy={py} r={(resolveSize(c) as { dia: number }).dia / 2 * S} {...common} />
+              : <rect x={px - f.hw * S} y={py - f.hh * S} width={f.hw * 2 * S} height={f.hh * 2 * S}
+                  rx={shape === 'slot' ? f.hh * S : 0} transform={`rotate(${-c.rotation} ${px} ${py})`} {...common} />;
+            return (
+              <g key={c.id}>
+                {shapeEl}
+                <text x={px + f.hw * S + 4} y={py - f.hh * S - 2} fill={on ? CO.geo : CO.dimDeep} fontFamily={MONO} fontSize="9" pointerEvents="none">{tag(i)}</text>
+                {hover === c.id && !on && (
+                  <text x={px} y={py + f.hh * S + 12} fill={CO.ink} fontFamily={MONO} fontSize="8.5" textAnchor="middle" pointerEvents="none">{COMPONENT_CATALOG[c.type].label}</text>
+                )}
+              </g>
+            );
+          })}
+
+          {sel && dims(sel)}
+        </svg>
+
+        {/* drawing title block */}
+        <div className="titleblock">
+          <div className="tb mk"><span className="k">PROJECT</span><span className="v">ENCLOSURE</span></div>
+          <div className="tb"><span className="k">PART</span><span className="v">FACEPLATE</span></div>
+          <div className="tb"><span className="k">VIEW</span><span className="v">TOP</span></div>
+          <div className="tb"><span className="k">UNITS</span><span className="v">MM</span></div>
+          <div className="tb"><span className="k">PANEL</span><span className="v">{d.outerL.toFixed(0)}×{d.outerW.toFixed(0)}</span></div>
+          <div className="tb"><span className="k">HOLES</span><span className="v">{components.length + (spec.closure.type === 'screw' ? 4 : 0)}</span></div>
         </div>
-      )}
-      {diags.length > 0 && (
-        <ul style={{ color: 'crimson', margin: 0, paddingLeft: 18 }}>
-          {diags.filter((x, i, a) => a.findIndex(y => y.componentId === x.componentId && y.kind === x.kind) === i)
-            .map((x, i) => <li key={i}>{x.message}</li>)}
-        </ul>
-      )}
+      </div>
+
+      {/* ── Engineering output ──────────────────────────────────── */}
+      <div className="inspect">
+        {sel ? (
+          <div className="callout">
+            <div className="callout-h">
+              <span className="name"><span style={{ color: CO.geo, fontFamily: MONO, marginRight: 8 }}>{tag(selIdx)}</span>{COMPONENT_CATALOG[sel.type].label}</span>
+              <span className="tag">{sizeLabel(sel)}</span>
+            </div>
+            <div className="callout-body">
+              <NumberField label="X" value={sel.x} step={0.5} onChange={v => patch(sel.id, { x: v })} />
+              <NumberField label="Y" value={sel.y} step={0.5} onChange={v => patch(sel.id, { y: v })} />
+              <div className="span2">
+                <NumberField label="rotation" value={sel.rotation} step={5} unit="°" onChange={v => patch(sel.id, { rotation: v })} />
+              </div>
+            </div>
+            <button className="del" onClick={() => remove(sel.id)}>Delete component</button>
+          </div>
+        ) : (
+          <div className="empty-hint">select a component to dimension it — or add one from the palette</div>
+        )}
+
+        <div className="eng">
+          <div className="eng-h">Hole Schedule <span className="count">{components.length + (spec.closure.type === 'screw' ? 4 : 0)} cuts</span></div>
+          <table className="sched">
+            <thead><tr><th>Tag</th><th>Item</th><th>Size</th><th className="num">X</th><th className="num">Y</th><th className="num">Rot</th></tr></thead>
+            <tbody>
+              {spec.closure.type === 'screw' && (
+                <tr><td className="tg">—</td><td>Screw ×4</td><td className="dim">⌀{screwClr} c'sink ⌀{spec.screw.headDia.toFixed(1)}</td><td className="num">·</td><td className="num">·</td><td className="num">·</td></tr>
+              )}
+              {components.length === 0 && spec.closure.type !== 'screw' && (
+                <tr><td colSpan={6} style={{ color: CO.dimDeep }}>no cuts yet</td></tr>
+              )}
+              {components.map((c, i) => (
+                <tr key={c.id} className={`click${c.id === selected ? ' on' : ''}${badIds.has(c.id) ? ' bad' : ''}`} onClick={() => setSelected(c.id)}>
+                  <td className="tg">{tag(i)}</td>
+                  <td>{COMPONENT_CATALOG[c.type].label}</td>
+                  <td className="dim">{sizeLabel(c)}</td>
+                  <td className="num">{c.x.toFixed(1)}</td>
+                  <td className="num">{c.y.toFixed(1)}</td>
+                  <td className="num">{c.rotation}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {uniqDiags.length > 0 && (
+          <div className="diags">
+            {uniqDiags.map((x, i) => (
+              <div key={i} className="diag"><span className="mk">!</span>{x.message}</div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
