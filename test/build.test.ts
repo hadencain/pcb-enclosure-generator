@@ -66,3 +66,21 @@ describe('buildEnclosure (manifold smoke)', () => {
     expect(tallerVol).toBeGreaterThan(defaultVol);
   });
 });
+
+describe('buildEnclosure (faceplate holes)', () => {
+  it('cuts one through-hole per placed component (lid genus rises by component count)', async () => {
+    const M = (await loadManifold()).Manifold;
+    const base = buildEnclosure(DEFAULT_SPEC);
+    const baseGenus = irToManifold(M, base.lid).genus(); // 4 screw holes
+
+    const withParts = {
+      ...DEFAULT_SPEC,
+      faceplate: { snap: 2.5, components: [
+        { id: 'a', type: 'pot' as const, x: 20, y: 10, rotation: 0 },
+        { id: 'b', type: 'display' as const, x: -15, y: -8, rotation: 0 },
+      ] },
+    };
+    const withGenus = irToManifold(M, buildEnclosure(withParts).lid).genus();
+    expect(withGenus).toBe(baseGenus + 2);
+  });
+});
