@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Preview3D } from './Preview3D';
+import { FaceplatePanel } from './FaceplatePanel';
 import { DEFAULT_SPEC, type EnclosureSpec } from '../lib/enclosure/schema';
 import { enclosureToMeshes, exportEnclosure } from '../lib/enclosure/export';
 import type { Mesh } from '../lib/types';
@@ -86,6 +87,7 @@ export function EnclosurePanel() {
           <button onClick={generate} disabled={busy}>{busy ? 'Generating…' : 'Generate'}</button>
           <button onClick={handleExport} disabled={busy}>Export</button>
         </div>
+        <FaceplatePanel spec={spec} onChange={setSpec} />
         {err && <p style={{ color: 'crimson', maxWidth: 240 }}>{err}</p>}
       </div>
       <Preview3D mesh={mesh} />
