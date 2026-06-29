@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_SPEC } from '../src/lib/enclosure/schema';
-import { COMPONENT_CATALOG, resolveSize, componentHole, componentFootprint, validateFaceplate } from '../src/lib/enclosure/faceplate';
-import type { PlacedComponent } from '../src/lib/enclosure/schema';
+import { COMPONENT_CATALOG, resolveSize, componentHole, componentFootprint, validateFaceplate, arrayMembers, arrayPitch } from '../src/lib/enclosure/faceplate';
+import type { PlacedComponent, ComponentArray } from '../src/lib/enclosure/schema';
 import type { DerivedDims } from '../src/lib/enclosure/derive';
 
 describe('faceplate schema', () => {
@@ -142,5 +142,42 @@ describe('validateFaceplate', () => {
     };
     const diags = validateFaceplate(spec);
     expect(diags.some(d => d.componentId === 'cs' && d.kind === 'screw-boss')).toBe(true);
+  });
+});
+
+const arr = (over: Partial<ComponentArray>): ComponentArray =>
+  ({ id: 'g', type: 'pot', cols: 3, rows: 1, width: 40, length: 20, x: 0, y: 0, rotation: 0, ...over });
+
+describe('arrayMembers', () => {
+  it('spreads a 3x1 row evenly across the width, centered', () => {
+    const m = arrayMembers(arr({ cols: 3, rows: 1, width: 40, x: 0, y: 0 }));
+    expect(m.length).toBe(3);
+    expect(m.map(p => p.x)).toEqual([-20, 0, 20]);
+    expect(m.every(p => Math.abs(p.y) < 1e-9)).toBe(true);
+  });
+  it('a 1x1 array is a single point at the center', () => {
+    const m = arrayMembers(arr({ cols: 1, rows: 1, x: 5, y: -3 }));
+    expect(m).toEqual([{ x: 5, y: -3 }]);
+  });
+  it('a 2x2 grid places four corners of the span', () => {
+    const m = arrayMembers(arr({ cols: 2, rows: 2, width: 30, length: 10, x: 0, y: 0 }));
+    expect(m.length).toBe(4);
+    const xs = m.map(p => +p.x.toFixed(3)).sort((a, b) => a - b);
+    const ys = m.map(p => +p.y.toFixed(3)).sort((a, b) => a - b);
+    expect(xs).toEqual([-15, -15, 15, 15]);
+    expect(ys).toEqual([-5, -5, 5, 5]);
+  });
+  it('rotation 90° maps +X column spread onto +Y', () => {
+    const m = arrayMembers(arr({ cols: 2, rows: 1, width: 20, rotation: 90, x: 0, y: 0 }));
+    // members were at x=±10,y=0 → rotated 90° CCW → x≈0, y=±10
+    expect(m.every(p => Math.abs(p.x) < 1e-9)).toBe(true);
+    expect(m.map(p => +p.y.toFixed(3)).sort((a, b) => a - b)).toEqual([-10, 10]);
+  });
+});
+
+describe('arrayPitch', () => {
+  it('derives even pitch from span and count, 0 for single', () => {
+    expect(arrayPitch(arr({ cols: 5, width: 40 }))).toEqual({ col: 10, row: 0 });
+    expect(arrayPitch(arr({ cols: 1, rows: 3, length: 30 }))).toEqual({ col: 0, row: 15 });
   });
 });

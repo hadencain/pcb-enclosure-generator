@@ -1,6 +1,6 @@
 import type { IR } from '../ir';
 import { bx, cy, tr, rot, uni } from '../ir';
-import type { ComponentType, ComponentSize, PlacedComponent, EnclosureSpec } from './schema';
+import type { ComponentType, ComponentSize, PlacedComponent, EnclosureSpec, ComponentArray } from './schema';
 import type { DerivedDims } from './derive';
 import { deriveDims } from './derive';
 
@@ -120,4 +120,31 @@ export function validateFaceplate(spec: EnclosureSpec): Diagnostic[] {
     }
   }
   return out;
+}
+
+/** Even column/row offsets across a span (centered). Count 1 → [0]. */
+function spread(count: number, span: number): number[] {
+  if (count <= 1) return [0];
+  const step = span / (count - 1);
+  return Array.from({ length: count }, (_, i) => -span / 2 + step * i);
+}
+
+/** Member centers of an array (row-major), in lid-center coords. */
+export function arrayMembers(a: ComponentArray): { x: number; y: number }[] {
+  const xs = spread(a.cols, a.width);
+  const ys = spread(a.rows, a.length);
+  const rad = (a.rotation * Math.PI) / 180;
+  const c = Math.cos(rad), s = Math.sin(rad);
+  const out: { x: number; y: number }[] = [];
+  for (const oy of ys) for (const ox of xs) {
+    out.push({ x: a.x + ox * c - oy * s, y: a.y + ox * s + oy * c });
+  }
+  return out;
+}
+
+export function arrayPitch(a: ComponentArray): { col: number; row: number } {
+  return {
+    col: a.cols > 1 ? a.width / (a.cols - 1) : 0,
+    row: a.rows > 1 ? a.length / (a.rows - 1) : 0,
+  };
 }
