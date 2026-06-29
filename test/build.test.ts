@@ -83,4 +83,17 @@ describe('buildEnclosure (faceplate holes)', () => {
     const withGenus = irToManifold(M, buildEnclosure(withParts).lid).genus();
     expect(withGenus).toBe(baseGenus + 2);
   });
+
+  it('cuts one hole per array member (lid genus rises by cols*rows)', async () => {
+    const M = (await loadManifold()).Manifold;
+    const baseGenus = irToManifold(M, buildEnclosure(DEFAULT_SPEC).lid).genus(); // 4 screw holes
+    const withArr = {
+      ...DEFAULT_SPEC,
+      faceplate: { snap: 2.5, components: [], arrays: [
+        { id: 'A', type: 'led' as const, cols: 3, rows: 2, width: 24, length: 12, x: 0, y: 0, rotation: 0 },
+      ] },
+    };
+    const g = irToManifold(M, buildEnclosure(withArr).lid).genus();
+    expect(g).toBe(baseGenus + 6); // 3 * 2 members
+  });
 });

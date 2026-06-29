@@ -5,7 +5,7 @@ import { deriveDims, resolvePort, type DerivedDims } from './derive';
 import { getJoint, type RimGeometry } from './joints';
 import { buildPortCutter } from './ports';
 import { perimeterChamfer } from './chamfer';
-import { componentHole } from './faceplate';
+import { componentHole, arrayMembers } from './faceplate';
 
 /** Centered XY positions of the four corner screw bosses (tucked into the outer corners). */
 function screwCorners(d: DerivedDims, bossR: number): [number, number][] {
@@ -104,6 +104,14 @@ export function buildEnclosure(spec: EnclosureSpec): { body: IR; lid: IR } {
   }
   for (const comp of spec.faceplate.components) {
     lidSubs.push(componentHole(comp, d, spec.lid.thickness));
+  }
+  for (const arr of spec.faceplate.arrays) {
+    for (const m of arrayMembers(arr)) {
+      lidSubs.push(componentHole(
+        { id: arr.id, type: arr.type, x: m.x, y: m.y, rotation: arr.rotation, size: arr.size },
+        d, spec.lid.thickness,
+      ));
+    }
   }
   const lid: IR = lidSubs.length ? diff([uni(lidAdds), ...lidSubs]) : uni(lidAdds);
 
