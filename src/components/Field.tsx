@@ -52,3 +52,27 @@ export function Seg<T extends string>({ value, options, onChange }: SegProps<T>)
     </div>
   );
 }
+
+interface RangeProps {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max: number;
+  step?: number;
+  unit?: string;
+}
+
+/** Label + range slider + live numeric value. */
+export function RangeField({ label, value, onChange, min = 0, max, step = 0.5, unit = 'mm' }: RangeProps) {
+  return (
+    <label className="rangefield">
+      <span className="rf-head">
+        <span className="rf-label">{label}</span>
+        <span className="rf-val">{value.toFixed(1)}<span className="rf-unit">{unit}</span></span>
+      </span>
+      <input type="range" min={min} max={max} step={step} value={value}
+        onChange={e => onChange(parseFloat(e.target.value))} />
+    </label>
+  );
+}

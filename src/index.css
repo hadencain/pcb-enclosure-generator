@@ -436,6 +436,14 @@ table.sched tr.click:hover td { background: rgba(255,255,255,0.03); }
 .readout .rrow .rv .u { color: var(--ink-faint); }
 .readout .rrow.tot .rk, .readout .rrow.tot .rv { color: var(--ink); }
 
+/* ── Range slider ─────────────────────────────────────────────── */
+.rangefield { display: flex; flex-direction: column; gap: 5px; margin-bottom: 9px; }
+.rf-head { display: flex; align-items: baseline; justify-content: space-between; }
+.rf-label { color: var(--ink-dim); font-size: 12px; }
+.rf-val { font-family: var(--mono); font-size: 12px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.rf-val .rf-unit { color: var(--ink-faint); font-size: 10px; padding-left: 3px; }
+.rangefield input[type=range] { width: 100%; accent-color: var(--acc); height: 16px; cursor: pointer; }
+
 /* scrollbars */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--line); border: 3px solid var(--panel); }
