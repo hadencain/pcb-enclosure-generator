@@ -21,9 +21,22 @@ export interface PlacedComponent {
   size?: ComponentSize;
 }
 
+export interface ComponentArray {
+  id: string;            // crypto.randomUUID()
+  type: ComponentType;   // one type per array
+  cols: number;          // >= 1
+  rows: number;          // >= 1
+  width: number;         // mm, span across columns
+  length: number;        // mm, span across rows
+  x: number; y: number;  // array center, lid-center mm
+  rotation: number;      // degrees CCW, whole-array
+  size?: ComponentSize;  // optional override of the catalog default
+}
+
 export interface Faceplate {
   snap: number;                    // grid step, mm
   components: PlacedComponent[];
+  arrays: ComponentArray[];
 }
 
 /** Component no-go volume, authored in PCB-corner space.
@@ -77,7 +90,7 @@ export const DEFAULT_SPEC: EnclosureSpec = {
   screw: { dia: 3.0, pilotDia: 2.5, bossDia: 6.0, headDia: 5.5 }, // M3 self-tapping
   joint: { type: 'openlock-clip', spacing: 20, tolerance: 0.2 },
   lid: { lipDepth: 4.0, lipInset: 1.2, thickness: 2.0 },
-  faceplate: { snap: 2.5, components: [] },
+  faceplate: { snap: 2.5, components: [], arrays: [] },
   chamfer: 0.8,
   tolerance: 0.2,
   exports: ['stl', 'scad'],

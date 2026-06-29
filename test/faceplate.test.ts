@@ -96,8 +96,14 @@ describe('componentFootprint', () => {
   });
 });
 
+describe('faceplate arrays schema', () => {
+  it('defaults to no arrays', () => {
+    expect(DEFAULT_SPEC.faceplate.arrays).toEqual([]);
+  });
+});
+
 describe('validateFaceplate', () => {
-  const withComps = (components: any[]) => ({ ...DEFAULT_SPEC, faceplate: { snap: 2.5, components } });
+  const withComps = (components: any[]) => ({ ...DEFAULT_SPEC, faceplate: { snap: 2.5, components, arrays: [] } });
 
   it('flags a component that runs off the panel edge', () => {
     const diags = validateFaceplate(withComps([at({ id: 'a', type: 'pot', x: 40, y: 0 })]));
@@ -132,7 +138,7 @@ describe('validateFaceplate', () => {
         // LED Ø5 → footprint hw=hh=2.5. Place at x=26, y=21: nearest AABB point to corner is
         // (28.5, 21), distance = 2.5 — outside bossR(2) but inside cornerR(max(4,10)/2=5).
         { id: 'cs', type: 'led' as const, x: 26, y: 21, rotation: 0 },
-      ] },
+      ], arrays: [] },
     };
     const diags = validateFaceplate(spec);
     expect(diags.some(d => d.componentId === 'cs' && d.kind === 'screw-boss')).toBe(true);

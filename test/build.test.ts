@@ -78,7 +78,7 @@ describe('buildEnclosure (faceplate holes)', () => {
       faceplate: { snap: 2.5, components: [
         { id: 'a', type: 'pot' as const, x: 20, y: 10, rotation: 0 },
         { id: 'b', type: 'display' as const, x: -15, y: -8, rotation: 0 },
-      ] },
+      ], arrays: [] },
     };
     const withGenus = irToManifold(M, buildEnclosure(withParts).lid).genus();
     expect(withGenus).toBe(baseGenus + 2);
