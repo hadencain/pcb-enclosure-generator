@@ -448,3 +448,9 @@ table.sched tr.click:hover td { background: rgba(255,255,255,0.03); }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--line); border: 3px solid var(--panel); }
 ::-webkit-scrollbar-track { background: transparent; }
+
+.addarray { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; }
+.addarray .aa-label { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-dim); }
+.array-box { fill: none; stroke: var(--ink-faint); stroke-dasharray: 4 3; }
+.array-box.on { stroke: var(--acc); }
+.array-box.bad { stroke: var(--warn); }

@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
-import type { EnclosureSpec, PlacedComponent, ComponentType } from '../lib/enclosure/schema';
-import { COMPONENT_CATALOG, resolveSize, componentFootprint, validateFaceplate } from '../lib/enclosure/faceplate';
+import type { EnclosureSpec, PlacedComponent, ComponentType, ComponentArray } from '../lib/enclosure/schema';
+import { COMPONENT_CATALOG, resolveSize, componentFootprint, validateFaceplate, arrayMembers, arrayPitch } from '../lib/enclosure/faceplate';
 import { deriveDims, resolvePort } from '../lib/enclosure/derive';
-import { NumberField } from './Field';
+import { NumberField, RangeField } from './Field';
 
 interface Props { spec: EnclosureSpec; onChange: (s: EnclosureSpec) => void; }
 
@@ -41,6 +41,7 @@ export function FaceplatePanel({ spec, onChange }: Props) {
   const { snap, components } = spec.faceplate;
   const [selected, setSelected] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
+  const [arrType, setArrType] = useState<ComponentType>('pot');
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ id: string; dx: number; dy: number } | null>(null);
 
@@ -71,6 +72,22 @@ export function FaceplatePanel({ spec, onChange }: Props) {
     if (selected === id) setSelected(null);
   }
 
+  const arrays = spec.faceplate.arrays;
+  const setArrays = (next: ComponentArray[]) =>
+    onChange({ ...spec, faceplate: { ...spec.faceplate, arrays: next } });
+  const patchArray = (id: string, p: Partial<ComponentArray>) =>
+    setArrays(arrays.map(a => (a.id === id ? { ...a, ...p } : a)));
+  function addArray(type: ComponentType) {
+    const a: ComponentArray = { id: crypto.randomUUID(), type, cols: 3, rows: 1, width: 40, length: 20, x: 0, y: 0, rotation: 0 };
+    setArrays([...arrays, a]);
+    setSelected(a.id);
+  }
+  function removeArray(id: string) {
+    setArrays(arrays.filter(a => a.id !== id));
+    if (selected === id) setSelected(null);
+  }
+  const selArray = arrays.find(a => a.id === selected) ?? null;
+
   function onPointerDown(e: React.PointerEvent, c: PlacedComponent) {
     e.stopPropagation();
     setSelected(c.id);
@@ -83,7 +100,9 @@ export function FaceplatePanel({ spec, onChange }: Props) {
     if (!drag.current) return;
     const r = svgRef.current!.getBoundingClientRect();
     const { x, y } = toMm(e.clientX - r.left, e.clientY - r.top);
-    patch(drag.current.id, { x: snapMm(x + drag.current.dx), y: snapMm(y + drag.current.dy) });
+    const nx = snapMm(x + drag.current.dx), ny = snapMm(y + drag.current.dy);
+    if (arrays.some(a => a.id === drag.current!.id)) patchArray(drag.current.id, { x: nx, y: ny });
+    else patch(drag.current.id, { x: nx, y: ny });
   }
   const onPointerUp = () => { drag.current = null; };
 
@@ -143,7 +162,9 @@ export function FaceplatePanel({ spec, onChange }: Props) {
   const sb0 = toPx(-halfL, 0).px + 6;
   const sbY = RULER + H - 12;
   const screwClr = (spec.screw.dia + 0.6).toFixed(1);
-  const cutCount = components.length + (spec.closure.type === 'screw' ? 4 : 0);
+  const cutCount = components.length
+    + arrays.reduce((n, a) => n + a.cols * a.rows, 0)
+    + (spec.closure.type === 'screw' ? 4 : 0);
 
   return (
     <div>
@@ -163,6 +184,17 @@ export function FaceplatePanel({ spec, onChange }: Props) {
             <span className="plus">+</span>
           </button>
         ))}
+      </div>
+
+      <div className="addarray">
+        <span className="aa-label">Array</span>
+        <select className="input" style={{ width: 150 }} value={arrType}
+          onChange={e => setArrType(e.target.value as ComponentType)}>
+          {(Object.keys(COMPONENT_CATALOG) as ComponentType[]).map(t => (
+            <option key={t} value={t}>{COMPONENT_CATALOG[t].label}</option>
+          ))}
+        </select>
+        <button className="btn" onClick={() => addArray(arrType)}>+ Add array</button>
       </div>
 
       <div className="draft">
@@ -213,6 +245,42 @@ export function FaceplatePanel({ spec, onChange }: Props) {
             <line x1={sb0 + 10 * S} y1={sbY - 3} x2={sb0 + 10 * S} y2={sbY + 3} stroke={CO.gray} strokeWidth="1" />
             <text x={sb0} y={sbY - 5} fontSize="8.5">10 mm</text>
           </g>
+
+          {/* arrays */}
+          {arrays.map(a => {
+            const on = a.id === selected, bad = badIds.has(a.id);
+            const members = arrayMembers(a);
+            const fp = componentFootprint({ id: a.id, type: a.type, x: 0, y: 0, rotation: a.rotation, size: a.size });
+            const shape = COMPONENT_CATALOG[a.type].shape;
+            const stroke = bad ? CO.warn : on ? CO.acc : CO.ink;
+            const fill = bad ? 'rgba(224,98,92,0.10)' : on ? 'rgba(111,147,184,0.16)' : 'rgba(233,235,238,0.05)';
+            const onDown = (e: React.PointerEvent) => {
+              e.stopPropagation();
+              setSelected(a.id);
+              const r = svgRef.current!.getBoundingClientRect();
+              const mm = toMm(e.clientX - r.left, e.clientY - r.top);
+              drag.current = { id: a.id, dx: a.x - mm.x, dy: a.y - mm.y };
+              (e.target as Element).setPointerCapture(e.pointerId);
+            };
+            // bounding box over the member centers, padded by the footprint half-extents
+            const cxs = members.map(m => m.x), cys = members.map(m => m.y);
+            const bx0 = Math.min(...cxs) - fp.hw, bx1 = Math.max(...cxs) + fp.hw;
+            const by0 = Math.min(...cys) - fp.hh, by1 = Math.max(...cys) + fp.hh;
+            const tl = toPx(bx0, by1), br = toPx(bx1, by0);
+            return (
+              <g key={a.id}>
+                <rect className={`array-box${on ? ' on' : ''}${bad ? ' bad' : ''}`}
+                  x={tl.px} y={tl.py} width={br.px - tl.px} height={br.py - tl.py}
+                  onPointerDown={onDown} style={{ cursor: 'grab' }} />
+                {members.map((m, k) => {
+                  const c = toPx(m.x, m.y);
+                  return shape === 'round'
+                    ? <circle key={k} cx={c.px} cy={c.py} r={fp.hw * S} stroke={stroke} fill={fill} strokeWidth={on ? 1.5 : 1} onPointerDown={onDown} style={{ cursor: 'grab' }} />
+                    : <rect key={k} x={c.px - fp.hw * S} y={c.py - fp.hh * S} width={fp.hw * 2 * S} height={fp.hh * 2 * S} rx={shape === 'slot' ? fp.hh * S : 0} transform={`rotate(${-a.rotation} ${c.px} ${c.py})`} stroke={stroke} fill={fill} strokeWidth={on ? 1.5 : 1} onPointerDown={onDown} style={{ cursor: 'grab' }} />;
+                })}
+              </g>
+            );
+          })}
 
           {/* components + tags + hover labels */}
           {components.map((c, i) => {
@@ -272,8 +340,25 @@ export function FaceplatePanel({ spec, onChange }: Props) {
             </div>
             <button className="del" onClick={() => remove(sel.id)}>Delete component</button>
           </div>
+        ) : selArray ? (
+          <div className="callout">
+            <div className="callout-h">
+              <span className="name">{COMPONENT_CATALOG[selArray.type].label} array</span>
+              <span className="tag">{selArray.cols}×{selArray.rows} · {arrayPitch(selArray).col.toFixed(1)}×{arrayPitch(selArray).row.toFixed(1)} pitch</span>
+            </div>
+            <div className="callout-body">
+              <NumberField label="columns" value={selArray.cols} step={1} unit="" onChange={v => patchArray(selArray.id, { cols: Math.max(1, Math.round(v)) })} />
+              <NumberField label="rows" value={selArray.rows} step={1} unit="" onChange={v => patchArray(selArray.id, { rows: Math.max(1, Math.round(v)) })} />
+              <div className="span2"><RangeField label="width" value={selArray.width} max={d.outerL - 6} onChange={v => patchArray(selArray.id, { width: v })} /></div>
+              <div className="span2"><RangeField label="length" value={selArray.length} max={d.outerW - 6} onChange={v => patchArray(selArray.id, { length: v })} /></div>
+              <NumberField label="X" value={selArray.x} step={0.5} onChange={v => patchArray(selArray.id, { x: v })} />
+              <NumberField label="Y" value={selArray.y} step={0.5} onChange={v => patchArray(selArray.id, { y: v })} />
+              <div className="span2"><NumberField label="rotation" value={selArray.rotation} step={5} unit="°" onChange={v => patchArray(selArray.id, { rotation: v })} /></div>
+            </div>
+            <button className="del" onClick={() => removeArray(selArray.id)}>Delete array</button>
+          </div>
         ) : (
-          <div className="empty-hint">select a component to dimension it — or add one from the palette</div>
+          <div className="empty-hint">select a component or array to edit — or add one from the palette</div>
         )}
 
         <div className="eng">
@@ -297,6 +382,19 @@ export function FaceplatePanel({ spec, onChange }: Props) {
                   <td className="num">{c.rotation}</td>
                 </tr>
               ))}
+              {arrays.map(a => {
+                const p = arrayPitch(a);
+                return (
+                  <tr key={a.id} className={`click${a.id === selected ? ' on' : ''}${badIds.has(a.id) ? ' bad' : ''}`} onClick={() => setSelected(a.id)}>
+                    <td className="tg">▦</td>
+                    <td>{COMPONENT_CATALOG[a.type].label} ×{a.cols * a.rows} ({a.cols}×{a.rows})</td>
+                    <td className="dim">{sizeLabel({ id: a.id, type: a.type, x: 0, y: 0, rotation: 0, size: a.size })} · {p.col.toFixed(1)}×{p.row.toFixed(1)}</td>
+                    <td className="num">{a.x.toFixed(1)}</td>
+                    <td className="num">{a.y.toFixed(1)}</td>
+                    <td className="num">{a.rotation}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
