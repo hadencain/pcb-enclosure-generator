@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_SPEC } from '../src/lib/enclosure/schema';
-import { COMPONENT_CATALOG, resolveSize, componentHole, componentFootprint, validateFaceplate, arrayMembers, arrayPitch } from '../src/lib/enclosure/faceplate';
+import { COMPONENT_CATALOG, resolveSize, componentHole, componentFootprint, validateFaceplate, arrayMembers, arrayPitch, collectPlacements } from '../src/lib/enclosure/faceplate';
 import type { PlacedComponent, ComponentArray } from '../src/lib/enclosure/schema';
 import type { DerivedDims } from '../src/lib/enclosure/derive';
 
@@ -179,5 +179,35 @@ describe('arrayPitch', () => {
   it('derives even pitch from span and count, 0 for single', () => {
     expect(arrayPitch(arr({ cols: 5, width: 40 }))).toEqual({ col: 10, row: 0 });
     expect(arrayPitch(arr({ cols: 1, rows: 3, length: 30 }))).toEqual({ col: 0, row: 15 });
+  });
+});
+
+const specWith = (over: any) => ({ ...DEFAULT_SPEC, faceplate: { snap: 2.5, components: [], arrays: [], ...over } });
+
+describe('collectPlacements', () => {
+  it('flattens singles and every array member with owner ids', () => {
+    const spec = specWith({
+      components: [{ id: 's', type: 'led', x: 0, y: 0, rotation: 0 }],
+      arrays: [{ id: 'A', type: 'pot', cols: 3, rows: 1, width: 40, length: 20, x: 0, y: -10, rotation: 0 }],
+    });
+    const ps = collectPlacements(spec);
+    expect(ps.filter(p => p.ownerId === 's').length).toBe(1);
+    expect(ps.filter(p => p.ownerId === 'A').length).toBe(3);
+  });
+});
+
+describe('validateFaceplate (arrays)', () => {
+  it('flags an array whose width collides its own members', () => {
+    const spec = specWith({ arrays: [{ id: 'A', type: 'push-button', cols: 3, rows: 1, width: 2, length: 0, x: 0, y: 0, rotation: 0 }] });
+    const diags = validateFaceplate(spec);
+    expect(diags.some(d => d.componentId === 'A' && d.kind === 'overlap')).toBe(true);
+  });
+  it('flags an array that runs off the panel', () => {
+    const spec = specWith({ arrays: [{ id: 'A', type: 'led', cols: 2, rows: 1, width: 120, length: 0, x: 0, y: 0, rotation: 0 }] });
+    expect(validateFaceplate(spec).some(d => d.componentId === 'A' && d.kind === 'off-panel')).toBe(true);
+  });
+  it('clean array yields no diagnostics', () => {
+    const spec = specWith({ arrays: [{ id: 'A', type: 'led', cols: 2, rows: 1, width: 20, length: 0, x: 0, y: 0, rotation: 0 }] });
+    expect(validateFaceplate(spec)).toEqual([]);
   });
 });

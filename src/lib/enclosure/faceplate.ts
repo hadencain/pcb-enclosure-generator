@@ -73,49 +73,54 @@ export function componentFootprint(comp: PlacedComponent): Footprint {
 export type DiagnosticKind = 'overlap' | 'screw-boss' | 'off-panel';
 export interface Diagnostic { componentId: string; kind: DiagnosticKind; message: string }
 
+export interface Placement { ownerId: string; x: number; y: number; fp: Footprint }
+
+export function collectPlacements(spec: EnclosureSpec): Placement[] {
+  const out: Placement[] = [];
+  for (const c of spec.faceplate.components)
+    out.push({ ownerId: c.id, x: c.x, y: c.y, fp: componentFootprint(c) });
+  for (const a of spec.faceplate.arrays) {
+    const memberFp = componentFootprint({ id: a.id, type: a.type, x: 0, y: 0, rotation: a.rotation, size: a.size });
+    for (const m of arrayMembers(a))
+      out.push({ ownerId: a.id, x: m.x, y: m.y, fp: memberFp });
+  }
+  return out;
+}
+
 export function validateFaceplate(spec: EnclosureSpec): Diagnostic[] {
   const d = deriveDims(spec);
-  const comps = spec.faceplate.components;
+  const ps = collectPlacements(spec);
   const out: Diagnostic[] = [];
-  const fps = comps.map(componentFootprint);
 
-  // off-panel
-  comps.forEach((c, i) => {
-    const f = fps[i];
-    if (Math.abs(c.x) + f.hw > d.outerL / 2 - EDGE_MARGIN ||
-        Math.abs(c.y) + f.hh > d.outerW / 2 - EDGE_MARGIN) {
-      out.push({ componentId: c.id, kind: 'off-panel', message: `${c.type} extends past the panel edge` });
+  ps.forEach(p => {
+    if (Math.abs(p.x) + p.fp.hw > d.outerL / 2 - EDGE_MARGIN ||
+        Math.abs(p.y) + p.fp.hh > d.outerW / 2 - EDGE_MARGIN) {
+      out.push({ componentId: p.ownerId, kind: 'off-panel', message: `element extends past the panel edge` });
     }
   });
 
-  // screw-boss collision (only when screw closure)
   if (spec.closure.type === 'screw') {
-    const bossR = spec.screw.bossDia / 2;
-    // cornerR covers both the boss column and the lid countersink bore (whichever is larger).
-    const cornerR = Math.max(spec.screw.bossDia, spec.screw.headDia) / 2;
-    const cx = d.outerL / 2 - bossR, cy0 = d.outerW / 2 - bossR;
+    const r = Math.max(spec.screw.bossDia, spec.screw.headDia) / 2;
+    const cx = d.outerL / 2 - spec.screw.bossDia / 2, cy0 = d.outerW / 2 - spec.screw.bossDia / 2;
     const corners = [[cx, cy0], [cx, -cy0], [-cx, cy0], [-cx, -cy0]];
-    comps.forEach((c, i) => {
-      const f = fps[i];
+    ps.forEach(p => {
       for (const [bx0, by0] of corners) {
-        // AABB-vs-circle: nearest point on the footprint box to the boss center
-        const nx = Math.max(c.x - f.hw, Math.min(bx0, c.x + f.hw));
-        const ny = Math.max(c.y - f.hh, Math.min(by0, c.y + f.hh));
-        if ((nx - bx0) ** 2 + (ny - by0) ** 2 < cornerR ** 2) {
-          out.push({ componentId: c.id, kind: 'screw-boss', message: `${c.type} overlaps a corner screw boss` });
+        const nx = Math.max(p.x - p.fp.hw, Math.min(bx0, p.x + p.fp.hw));
+        const ny = Math.max(p.y - p.fp.hh, Math.min(by0, p.y + p.fp.hh));
+        if ((nx - bx0) ** 2 + (ny - by0) ** 2 < r ** 2) {
+          out.push({ componentId: p.ownerId, kind: 'screw-boss', message: `element overlaps a corner screw boss` });
           break;
         }
       }
     });
   }
 
-  // pairwise overlap (AABB intersection)
-  for (let i = 0; i < comps.length; i++) {
-    for (let j = i + 1; j < comps.length; j++) {
-      const a = comps[i], b = comps[j], fa = fps[i], fb = fps[j];
-      if (Math.abs(a.x - b.x) < fa.hw + fb.hw && Math.abs(a.y - b.y) < fa.hh + fb.hh) {
-        out.push({ componentId: a.id, kind: 'overlap', message: `${a.type} overlaps ${b.type}` });
-        out.push({ componentId: b.id, kind: 'overlap', message: `${b.type} overlaps ${a.type}` });
+  for (let i = 0; i < ps.length; i++) {
+    for (let j = i + 1; j < ps.length; j++) {
+      const a = ps[i], b = ps[j];
+      if (Math.abs(a.x - b.x) < a.fp.hw + b.fp.hw && Math.abs(a.y - b.y) < a.fp.hh + b.fp.hh) {
+        out.push({ componentId: a.ownerId, kind: 'overlap', message: `elements overlap` });
+        out.push({ componentId: b.ownerId, kind: 'overlap', message: `elements overlap` });
       }
     }
   }
